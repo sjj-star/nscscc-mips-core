@@ -23,9 +23,9 @@ module mmu(
     data_awlen,
     data_awsize,
     data_awburst,
+    data_awcache,
     data_awvalid,
     data_awready,
-    data_wid,
     data_wdata,
     data_wstrb,
     data_wlast,
@@ -40,6 +40,7 @@ module mmu(
     data_arlen,
     data_arsize,
     data_arburst,
+    data_arcache,
     data_arvalid,
     data_arready,
     data_rid,
@@ -53,9 +54,9 @@ module mmu(
     inst_awlen,
     inst_awsize,
     inst_awburst,
+    inst_awcache,
     inst_awvalid,
     inst_awready,
-    inst_wid,
     inst_wdata,
     inst_wstrb,
     inst_wlast,
@@ -70,6 +71,7 @@ module mmu(
     inst_arlen,
     inst_arsize,
     inst_arburst,
+    inst_arcache,
     inst_arvalid,
     inst_arready,
     inst_rid,
@@ -99,12 +101,12 @@ output reg [31:0] data_cpu_rdata;
 
 output wire [3 :0] data_awid   , inst_awid   ;
 output wire [31:0] data_awaddr , inst_awaddr ;
-output wire [3 :0] data_awlen  , inst_awlen  ;
+output wire [7 :0] data_awlen  , inst_awlen  ;
 output wire [2 :0] data_awsize , inst_awsize ;
 output wire [1 :0] data_awburst, inst_awburst;
+output reg  [3 :0] data_awcache, inst_awcache;
 output reg         data_awvalid, inst_awvalid;
 input  wire        data_awready, inst_awready;
-output wire [3 :0] data_wid    , inst_wid    ;
 output wire [31:0] data_wdata  , inst_wdata  ;
 output wire [3 :0] data_wstrb  , inst_wstrb  ;
 output reg         data_wlast  , inst_wlast  ;
@@ -116,14 +118,15 @@ input  wire        data_bvalid , inst_bvalid ;
 output wire        data_bready , inst_bready ;
 output wire [3 :0] data_arid   , inst_arid   ;
 output wire [31:0] data_araddr , inst_araddr ;
-output wire [3 :0] data_arlen  , inst_arlen  ;
+output wire [7 :0] data_arlen  , inst_arlen  ;
 output wire [2 :0] data_arsize , inst_arsize ;
 output wire [1 :0] data_arburst, inst_arburst;
+output reg  [3 :0] data_arcache, inst_arcache;
 output reg         data_arvalid, inst_arvalid;
 input  wire        data_arready, inst_arready;
 input  wire [3 :0] data_rid    , inst_rid    ;
 input  wire [31:0] data_rdata  , inst_rdata  ;
-input  wire [2 :0] data_rresp  , inst_rresp  ;
+input  wire [1 :0] data_rresp  , inst_rresp  ;
 input  wire        data_rlast  , inst_rlast  ;
 input  wire        data_rvalid , inst_rvalid ;
 output wire        data_rready , inst_rready ;
@@ -144,16 +147,31 @@ assign kseg1_data = {3'b000,data_cpu_addr[28:0]};
 always @ (*)
 begin
     case(inst_cpu_addr[31:29])
-        `ADDR_SEG3:
+        `ADDR_SEG3: begin
+            inst_awcache = 4'b1111;
+            inst_arcache = 4'b1111;
             inst_mem_addr = inst_cpu_addr;
-        `ADDR_SEG2:
+        end
+        `ADDR_SSEG: begin
+            inst_awcache = 4'b1111;
+            inst_arcache = 4'b1111;
             inst_mem_addr = inst_cpu_addr;
-        `ADDR_SEG1:
+        end
+        `ADDR_SEG1: begin
+            inst_awcache = 4'b0000;
+            inst_arcache = 4'b0000;
             inst_mem_addr = kseg1_inst;
-        `ADDR_SEG0:
+        end
+        `ADDR_SEG0: begin
+            inst_awcache = 4'b1111;
+            inst_arcache = 4'b1111;
             inst_mem_addr = kseg0_inst;
-        default://kuseg
+        end
+        default: begin //kuseg
+            inst_awcache = 4'b1111;
+            inst_arcache = 4'b1111;
             inst_mem_addr = inst_cpu_addr;
+        end
 
     endcase
 end
@@ -161,16 +179,31 @@ end
 always @ (*)
 begin
     case(data_cpu_addr[31:29])
-        `ADDR_SEG3:
+        `ADDR_SEG3: begin
+            data_awcache = 4'b1111;
+            data_arcache = 4'b1111;
             data_mem_addr = data_cpu_addr;
-        `ADDR_SEG2:
+        end
+        `ADDR_SSEG: begin
+            data_awcache = 4'b1111;
+            data_arcache = 4'b1111;
             data_mem_addr = data_cpu_addr;
-        `ADDR_SEG1:
+        end
+        `ADDR_SEG1: begin
+            data_awcache = 4'b0000;
+            data_arcache = 4'b0000;
             data_mem_addr = kseg1_data;
-        `ADDR_SEG0:
+        end
+        `ADDR_SEG0: begin
+            data_awcache = 4'b1111;
+            data_arcache = 4'b1111;
             data_mem_addr = kseg0_data;
-        default://kuseg
+        end
+        default: begin //kuseg
+            data_awcache = 4'b1111;
+            data_arcache = 4'b1111;
             data_mem_addr = data_cpu_addr;
+        end
     endcase
 end
 
@@ -188,16 +221,15 @@ localparam HANDSHAK = 2'd2;
 reg data_cpu_wready, data_cpu_rready;
 assign data_awid    = 4'b0;
 assign data_awaddr  = data_mem_addr;
-assign data_awlen   = 4'b0;
+assign data_awlen   = 8'b0;
 assign data_awsize  = {1'b0, data_cpu_size};
 assign data_awburst = 2'b1;
-assign data_wid     = 4'b0;
 assign data_wdata   = data_cpu_wdata;
 assign data_wstrb   = data_cpu_wstrb;
 assign data_bready  = 1'b1;
 assign data_arid    = 4'b0;
 assign data_araddr  = data_mem_addr;
-assign data_arlen   = 4'b0;
+assign data_arlen   = 8'b0;
 assign data_arsize  = {1'b0, data_cpu_size};
 assign data_arburst = 2'b1;
 assign data_rready  = 1'b1;
@@ -356,16 +388,15 @@ assign data_cpu_ready = data_cpu_wready | data_cpu_rready;
 /* CPU Instruction Port, Start*/
 assign inst_awid    = 4'b0;
 assign inst_awaddr  = 32'b0;
-assign inst_awlen   = 4'b0;
+assign inst_awlen   = 8'b0;
 assign inst_awsize  = 3'b0;
 assign inst_awburst = 2'b0;
-assign inst_wid     = 4'b0;
 assign inst_wdata   = 32'b0;
 assign inst_wstrb   = 4'b0;
 assign inst_bready  = 1'b0;
 assign inst_arid    = 4'b0;
 assign inst_araddr  = inst_mem_addr;
-assign inst_arlen   = 4'b0;
+assign inst_arlen   = 8'b0;
 assign inst_arsize  = 3'd2;
 assign inst_arburst = 2'b1;
 assign inst_rready  = 1'b1;

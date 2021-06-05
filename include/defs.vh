@@ -3,7 +3,7 @@
 `define INST_INTI  32'h0000_0000
 
 `define ADDR_SEG3 3'b111
-`define ADDR_SEG2 3'b110
+`define ADDR_SSEG 3'b110
 `define ADDR_SEG1 3'b101
 `define ADDR_SEG0 3'b100
 
