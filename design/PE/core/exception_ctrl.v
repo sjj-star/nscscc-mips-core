@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module exception_ctrl(
 //output
@@ -132,3 +132,6 @@ begin
 end
 
 endmodule
+
+`include "pe_undefs.vh"
+

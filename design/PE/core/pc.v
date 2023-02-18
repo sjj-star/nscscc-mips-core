@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module pc(
 //output
@@ -71,3 +71,6 @@ begin
 end
 
 endmodule
+
+`include "pe_undefs.vh"
+

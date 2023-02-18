@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module alu(
     clk,
@@ -101,3 +101,6 @@ assign srl_result = alu_opreat_A >> alu_opreat_B[4:0];
 assign sra_result = $signed(alu_opreat_A) >>> alu_opreat_B[4:0];//srl_result | (alu_opreat_A[31] ? ~({32{1'b1}}>>alu_opreat_B[4:0]) : 32'h0);
 
 endmodule
+
+`include "pe_undefs.vh"
+

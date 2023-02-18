@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module hiloreg(
 //output
@@ -46,3 +46,6 @@ assign hi = we_hi ? wd_hi : hilo[1];
 assign lo = we_lo ? wd_lo : hilo[0];
 
 endmodule
+
+`include "pe_undefs.vh"
+

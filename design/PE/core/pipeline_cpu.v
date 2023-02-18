@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module pipeline_cpu(
     clk,
@@ -653,3 +653,6 @@ exception_ctrl excep_ctrl(//output
                           .soft_int      (excep_cp0_softint),
                           .am_excep_code (excep_am_excepcode));
 endmodule
+
+`include "pe_undefs.vh"
+

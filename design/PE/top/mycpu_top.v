@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module mycpu_top(
     int,//high
@@ -460,3 +460,6 @@ axi4to3_converter core_axi_port (
 );
 
 endmodule
+
+`include "pe_undefs.vh"
+

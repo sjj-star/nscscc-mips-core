@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module cop0(
 //output
@@ -172,3 +172,6 @@ begin
     end
 end
 endmodule
+
+`include "pe_undefs.vh"
+

@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module decode(
 //output
@@ -320,3 +320,6 @@ assign reg_t_d_31 = (inst_add | inst_addu | inst_sub | inst_subu | inst_slt | in
 assign exception_is_return = inst_eret;
 
 endmodule
+
+`include "pe_undefs.vh"
+

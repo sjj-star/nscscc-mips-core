@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module writeback(
 //output
@@ -79,3 +79,6 @@ hiloreg hilo(.clk(clk),
              .lo(lo_value));
 
 endmodule
+
+`include "pe_undefs.vh"
+

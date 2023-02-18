@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "defs.vh"
+`include "pe_defs.vh"
 
 module registerfile(
 //outpu
@@ -88,3 +88,6 @@ always @(*) begin
 end
 
 endmodule
+
+`include "pe_undefs.vh"
+
