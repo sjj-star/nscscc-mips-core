@@ -3,3 +3,12 @@
 *.elf
 *.bin
 *.a
+/iplibs/*/*
+!/iplibs/*/*.xci
+/fpga_project/*/*
+!/fpga_project/*/*xpr
+!/fpga_project/*/*xdc
+*.log
+*.jou
+*.str
+*.Xil/
