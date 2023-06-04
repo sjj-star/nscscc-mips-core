@@ -7,7 +7,7 @@ module diver(
     A,
     B,
     start,
-    is_busover,
+    is_busbusy,
 //output
     Q,
     R,
@@ -16,7 +16,7 @@ module diver(
 input wire clk;
 input wire rst;
 input wire start;
-input wire is_busover;
+input wire is_busbusy;
 input wire [31:0] A;
 input wire [31:0] B;
 output wire [31:0] Q;
@@ -29,7 +29,7 @@ always @ (posedge clk)
 begin
     if(rst)
         count <= 5'd0;
-    else if((count == 5'd17)&(~is_busover))
+    else if((count == 5'd17)&(~is_busbusy))
         count <= 5'd17;
     else if(start)
         if(count == 5'd17)
@@ -50,7 +50,7 @@ begin
         end
         5'd17:
         begin
-            load = is_busover;
+            load = is_busbusy;
             opreat_over = 1'b1;
         end
         default:

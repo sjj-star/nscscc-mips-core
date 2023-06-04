@@ -55,12 +55,11 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //*************************************************************************
 
 //for simulation:
-//1. if define SIMU_USE_PLL = 1, will use clk_pll to generate cpu_clk/sys_clk,
+//1. if don't define PLL_SIM, will use clk_pll to generate cpu_clk/sys_clk,
 //   and simulation will be very slow.
-//2. usually, please define SIMU_USE_PLL=0 to speed up simulation by assign
+//2. usually, please define PLL_SIM to speed up simulation by assign
 //   cpu_clk=clk, sys_clk = clk.
-//   at this time, frequency of cpu_clk is 91MHz.
-`define SIMU_USE_PLL 0 //set 0 to speed up simulation
+//   at this time, frequency of cpu_clk is xxxMHz.
 
 module soc_axi_lite_top #(parameter SIMULATION=1'b0)
 (
@@ -99,28 +98,25 @@ begin
     sys_resetn_t <= resetn;
     sys_resetn   <= sys_resetn_t;
 end
-//simulation clk.
-reg clk_91m;
-initial
-begin 
-    clk_91m = 1'b0;
-end
-always #5.5 clk_91m = ~clk_91m;
-generate if(SIMULATION && `SIMU_USE_PLL==0)
-begin: speedup_simulation
-    assign cpu_clk = clk_91m;
+
+`ifdef PLL_SIM
+    //simulation clk.
+    reg clk_sim;
+    initial
+    begin
+        clk_sim = 1'b0;
+    end
+    always #4.167 clk_sim = ~clk_sim;
+    assign cpu_clk = clk_sim;
     assign sys_clk = clk;
-end
-else
-begin: pll
+`else
     clk_pll clk_pll
     (
         .clk_in1 (clk    ),
         .cpu_clk (cpu_clk),
         .sys_clk (sys_clk)
     );
-end
-endgenerate
+`endif
 
 //cpu axi
 wire [3 :0] cpu_arid   ;

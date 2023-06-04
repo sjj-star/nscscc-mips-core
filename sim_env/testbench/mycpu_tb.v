@@ -33,8 +33,13 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 `timescale 1ns / 1ps
 
 `define CONFREG_NUM_REG      soc_lite.u_confreg.num_data
+`ifdef RUN_PERF_TEST
+`define CONFREG_OPEN_TRACE   0
+`define CONFREG_NUM_MONITOR  0
+`else
 `define CONFREG_OPEN_TRACE   soc_lite.u_confreg.open_trace
 `define CONFREG_NUM_MONITOR  soc_lite.u_confreg.num_monitor
+`endif
 `define CONFREG_UART_DISPLAY soc_lite.u_confreg.write_uart_valid
 `define CONFREG_UART_DATA    soc_lite.u_confreg.write_uart_data
 `define END_PC 32'hbfc00100
@@ -63,9 +68,12 @@ begin
     resetn = 1'b0;
     #2000;
     resetn = 1'b1;
+	`ifdef RUN_PERF_TEST
+		force switch = ~8'b0001;
+	`endif
 end
 always #5 clk=~clk;
-soc_axi_lite_top #(.SIMULATION(1'b1)) soc_lite
+soc_axi_lite_top #(.SIMULATION(1'b0)) soc_lite
 (
        .resetn      (resetn     ), 
        .clk         (clk        ),
@@ -230,14 +238,8 @@ always @(posedge sys_clk)
 begin
     if(uart_display)
     begin
-        if(uart_data==8'hff)
-        begin
-            $finish;
-        end
-        else
-        begin
-            $write("%c",uart_data);
-        end
+		if(uart_data!=8'hff)
+			$write("%c",uart_data);
     end
 end
 
@@ -250,7 +252,7 @@ begin
     begin
         debug_end <= 1'b0;
     end
-    else if(test_end && !debug_end)
+	else if(test_end && !debug_end `ifdef RUN_PERF_TEST && (~switch) == 8'b1010 `endif)
     begin
         debug_end <= 1'b1;
         $display("==============================================================");
@@ -267,5 +269,14 @@ begin
         end
 	    $finish;
 	end
+`ifdef RUN_PERF_TEST
+	else if(debug_wb_pc==`END_PC) begin
+		#2000;
+		force switch = ~((~switch) + 1);
+		resetn = 1'b0;
+		#2000;
+		resetn = 1'b1;
+	end
+`endif
 end
 endmodule

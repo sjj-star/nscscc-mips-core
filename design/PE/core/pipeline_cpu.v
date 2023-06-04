@@ -5,10 +5,10 @@ module pipeline_cpu(
     clk,
     reset,
     int,
-    instruction_valid,
-    instruction_ready,
-    instruction_addr,
-    instruction,
+    inst_valid,
+    inst_ready,
+    inst_addr,
+    inst,
     data_valid,
     data_ready,
     data_wr,
@@ -26,10 +26,10 @@ module pipeline_cpu(
 input  wire        clk;
 input  wire        reset;
 input  wire [5:0]  int;
-output wire        instruction_valid;
-input  wire        instruction_ready;
-output wire [31:0] instruction_addr;
-input  wire [31:0] instruction;
+output wire        inst_valid;
+input  wire        inst_ready;
+output wire [31:0] inst_addr;
+input  wire [31:0] inst;
 output wire        data_valid;
 input  wire        data_ready;
 output wire        data_wr;
@@ -206,15 +206,15 @@ wire ibus_busy;
 wire dbus_busy;
 wire bus_busy;
 
-assign ibus_over = instruction_valid & instruction_ready;
+assign ibus_over = inst_valid & inst_ready;
 assign dbus_over = data_valid & data_ready;
-assign ibus_busy = instruction_valid & (~instruction_ready);
+assign ibus_busy = inst_valid & (~inst_ready);
 assign dbus_busy = data_valid & (~data_ready);
 assign bus_busy  = ibus_busy | dbus_busy;
 
 assign pc_reg_en        = (if_cft_pcen & ex_opover & (~bus_busy))|excep_isexception|excep_id_isexcepreturn;
 assign inst_fetch_en    = if_cft_pipen & (~(excep_isexception|excep_id_isexcepreturn|excep_if_laddrerror|if_ex_isbj));
-assign instruction_valid= inst_fetch_en & inst_q_empty;
+assign inst_valid		= inst_fetch_en & inst_q_empty;
 assign inst_fetch       = inst_fetch_en & ex_opover & (~bus_busy);
 
 assign if_id_pipreg_clr = ((~dbus_busy) & if_ex_isbj)|excep_idclr|(excep_id_isexcepreturn & ex_opover)|reset;
@@ -233,7 +233,7 @@ assign data_tr_retire   = data_req & ex_opover & (~bus_busy);
 
 assign wb_regfile_en = (ex_opover & (~bus_busy))|excep_isexception;
 
-assign instruction_addr = if_pc;
+assign inst_addr = if_pc;
 
 pc pc_pipelinereg(//input
                   .clk                   (clk),
@@ -260,7 +260,7 @@ bypass_fifo #(
     .reset(reset),
     .read(inst_fetch),
     .write(ibus_over),
-    .indata(instruction),
+    .indata(inst),
     .outdata(if_inst_q),
     .empty(inst_q_empty),
     .full()

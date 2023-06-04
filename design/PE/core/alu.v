@@ -66,7 +66,7 @@ diver div_s_u(.clk(clk),
               .A(diver_A),
               .B(diver_B),
               .start(diver_start),
-              .is_busover(is_busbusy),
+              .is_busbusy(is_busbusy),
               .Q(diver_result_temp[31:0]),
               .R(diver_result_temp[63:32]),
               .opreat_over(diver_opreat_over));

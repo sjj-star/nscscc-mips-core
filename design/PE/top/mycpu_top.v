@@ -108,10 +108,10 @@ output wire [31:0]  debug_wb_rf_wdata;
 
 wire reset = ~aresetn;
 
-wire instruction_valid;
-wire instruction_ready;
-wire [31:0] instruction_addr;
-wire [31:0] instruction;
+wire inst_valid;
+wire inst_ready;
+wire [31:0] inst_addr;
+wire [31:0] inst;
 
 wire data_cpu_valid;
 wire data_cpu_ready;
@@ -164,10 +164,10 @@ pipeline_cpu cpu(
     .clk                   (aclk             ),
     .reset                 (reset            ),
     .int                   (int              ),
-    .instruction_valid     (instruction_valid),
-    .instruction_ready     (instruction_ready),
-    .instruction_addr      (instruction_addr ),
-    .instruction           (instruction      ),
+    .inst_valid            (inst_valid       ),
+    .inst_ready            (inst_ready       ),
+    .inst_addr             (inst_addr        ),
+    .inst                  (inst             ),
     .data_valid            (data_cpu_valid   ),
     .data_ready            (data_cpu_ready   ),
     .data_wr               (data_cpu_wr      ),
@@ -185,10 +185,10 @@ pipeline_cpu cpu(
 mmu memory_management_unit(
     .clk            (aclk             ),
     .reset          (reset            ),
-    .inst_cpu_valid (instruction_valid),
-    .inst_cpu_ready (instruction_ready),
-    .inst_cpu_addr  (instruction_addr ),
-    .inst_cpu_rdata (instruction      ),
+    .inst_cpu_valid (inst_valid       ),
+    .inst_cpu_ready (inst_ready       ),
+    .inst_cpu_addr  (inst_addr        ),
+    .inst_cpu_rdata (inst             ),
     .data_cpu_valid (data_cpu_valid   ),
     .data_cpu_ready (data_cpu_ready   ),
     .data_cpu_wr    (data_cpu_wr      ),
