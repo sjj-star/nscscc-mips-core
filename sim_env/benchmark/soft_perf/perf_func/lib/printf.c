@@ -76,7 +76,7 @@ again:
 
 	}
 	else{
-		if(c=='\n') putchar('\r');
+		//if(c=='\n') putchar('\r');
 		putchar(c);
 	}
 }
