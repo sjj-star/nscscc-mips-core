@@ -5,10 +5,12 @@ module pipeline_cpu(
     clk,
     reset,
     int,
-    inst_valid,
-    inst_ready,
+    inst_addr_valid,
+    inst_addr_ready,
     inst_addr,
-    inst,
+    inst_line_valid,
+    inst_line_ready,
+    inst_line,
     data_valid,
     data_ready,
     data_wr,
@@ -26,10 +28,12 @@ module pipeline_cpu(
 input  wire        clk;
 input  wire        reset;
 input  wire [5:0]  int;
-output wire        inst_valid;
-input  wire        inst_ready;
+output wire        inst_addr_valid;
+input  wire        inst_addr_ready;
 output wire [31:0] inst_addr;
-input  wire [31:0] inst;
+input  wire        inst_line_valid;
+output wire        inst_line_ready;
+input  wire [31:0] inst_line;
 output wire        data_valid;
 input  wire        data_ready;
 output wire        data_wr;
@@ -50,15 +54,15 @@ output wire [31:0] debug_wb_rf_wdata;
 *如果是寄存器的控制信号则统一指出控制信号来自哪一级以及用途，其格式不做具体要求
 */
 
-wire        if_cft_pcen;
 wire [31:0] if_ex_bjpc;
 wire        if_ex_isbj;
 wire [31:0] if_pc;
 wire [29:0] if_pc4;
-wire [31:0] if_inst_q;
+wire [31:0] if_inst;
 wire [4:0]  if_excepcode;
 reg  [31:0] id_instruction_pipreg;
-wire        if_cft_pipen;
+wire        id_cft_en;
+reg         id_vld_pipreg;
 reg  [31:0] id_pc_pipreg;
 reg  [29:0] id_pc4_pipreg;
 reg  [4:0]  id_excepcode_pipreg;
@@ -84,7 +88,7 @@ wire        cft_id_uselo;
 wire [4:0]  cft_id_rs;
 wire [4:0]  cft_id_rt;
 wire [31:0] id_pc;
-wire        ex_cft_clr;
+reg         ex_vld_pipreg;
 reg  [43:0] ex_instropreat_pipreg;
 reg  [4:0]  ex_regaddress_pipreg;
 reg  [7:0]  ex_copaddr_pipreg;
@@ -117,6 +121,7 @@ wire        cft_ex_wlo;
 wire [31:0] cft_ex_hidata;
 wire [31:0] cft_ex_lodata;
 wire [31:0] ex_pc;
+reg         am_vld_pipreg;
 reg  [9:0]  am_instropreat_pipreg;
 reg  [4:0]  am_regaddress_pipreg;
 reg  [31:0] am_regwdata_pipreg;
@@ -139,7 +144,6 @@ wire [4:0]  am_regaddress;
 wire [31:0] am_regdata;
 wire [31:0] am_hiwdata;
 wire [31:0] am_lowdata;
-wire [31:0] data_rdata_q;
 wire        cft_am_wreg;
 wire [4:0]  cft_am_regaddr;
 wire [31:0] cft_am_regdata;
@@ -148,6 +152,7 @@ wire        cft_am_wlo;
 wire [31:0] cft_am_hidata;
 wire [31:0] cft_am_lodata;
 wire [31:0] am_pc;
+reg         wb_vld_pipreg;
 reg         wb_instropreat_pipreg;
 reg         wb_writereg_pipreg;
 reg         wb_writehi_pipreg;
@@ -184,10 +189,7 @@ wire [4:0]  excep_am_excepcode;
 wire [4:0]  cp0_excep_excepcode;
 wire        excep_am_isinstload;
 
-wire pc_reg_en;
-wire inst_fetch_en;
-wire inst_fetch;
-wire inst_q_empty;
+wire inst_retire;
 wire if_id_pipreg_clr;
 wire if_id_pipreg_en;
 wire id_ex_pipreg_clr;
@@ -196,92 +198,74 @@ wire ex_am_pipreg_clr;
 wire ex_am_pipreg_en;
 wire am_wb_pipreg_clr;
 wire am_wb_pipreg_en;
-wire data_req;
-wire data_tr_retire;
-wire data_q_empty;
-wire wb_regfile_en;
-wire ibus_over;
+wire inst_valid;
+wire inst_ready;
 wire dbus_over;
-wire ibus_busy;
 wire dbus_busy;
-wire bus_busy;
 
-assign ibus_over = inst_valid & inst_ready;
 assign dbus_over = data_valid & data_ready;
-assign ibus_busy = inst_valid & (~inst_ready);
 assign dbus_busy = data_valid & (~data_ready);
-assign bus_busy  = ibus_busy | dbus_busy;
 
-assign pc_reg_en        = (if_cft_pcen & ex_opover & (~bus_busy))|excep_isexception|excep_id_isexcepreturn;
-assign inst_fetch_en    = if_cft_pipen & (~(excep_isexception|excep_id_isexcepreturn|excep_if_laddrerror|if_ex_isbj));
-assign inst_valid		= inst_fetch_en & inst_q_empty;
-assign inst_fetch       = inst_fetch_en & ex_opover & (~bus_busy);
+assign inst_retire = excep_isexception|excep_id_isexcepreturn|(if_ex_isbj & id_vld_pipreg & (~dbus_busy));
+assign inst_ready = (id_cft_en & ex_opover & (~dbus_busy))|inst_retire;
 
-assign if_id_pipreg_clr = ((~dbus_busy) & if_ex_isbj)|excep_idclr|(excep_id_isexcepreturn & ex_opover)|reset;
-assign if_id_pipreg_en  = (if_cft_pipen & ex_opover & (~bus_busy))|excep_isexception;
+assign if_id_pipreg_clr = ((~if_id_pipreg_en) & id_ex_pipreg_en & id_cft_en)|excep_idclr|excep_id_isexcepreturn;
+assign if_id_pipreg_en  = id_cft_en & ex_opover & (~dbus_busy) & inst_valid & (~inst_retire);
 
-assign id_ex_pipreg_clr = excep_exclr|(ex_cft_clr & (~dbus_busy))|reset;
-assign id_ex_pipreg_en  = (ex_opover & (~bus_busy))|excep_isexception;
+assign id_ex_pipreg_clr = ((~id_cft_en) & ex_am_pipreg_en)|excep_exclr;
+assign id_ex_pipreg_en  = ex_opover & (~dbus_busy) & ((~ex_instropreat_pipreg[0])|id_vld_pipreg); // ex_instropreat_pipreg[0]: the instruction is branch/jump
 
-assign ex_am_pipreg_clr = excep_amclr|reset;
-assign ex_am_pipreg_en  = (ex_opover & (~bus_busy))|excep_isexception;
+assign ex_am_pipreg_clr = (((ex_instropreat_pipreg[0] & (~id_vld_pipreg))|(~ex_opover)) & (~dbus_busy))|excep_amclr;
+assign ex_am_pipreg_en  = ex_opover & (~dbus_busy);
 
-assign am_wb_pipreg_clr = excep_wbclr|reset;
-assign am_wb_pipreg_en  = (ex_opover & (~bus_busy))|excep_isexception;
-assign data_valid       = data_req & data_q_empty;
-assign data_tr_retire   = data_req & ex_opover & (~bus_busy);
+assign am_wb_pipreg_clr = ((~am_wb_pipreg_en) & wb_writereg_pipreg)|excep_wbclr;
+assign am_wb_pipreg_en  = ~dbus_busy;
 
-assign wb_regfile_en = (ex_opover & (~bus_busy))|excep_isexception;
-
-assign inst_addr = if_pc;
-
-pc pc_pipelinereg(//input
+inst_fetch if_unit(//input
                   .clk                   (clk),
                   .rst                   (reset),
-                  .pc_reg_enable         (pc_reg_en),
                   .jump_branch_address   (if_ex_bjpc),
-                  .is_jump_branch        (if_ex_isbj),
+                  .is_jump_branch        (if_ex_isbj&id_vld_pipreg&(~dbus_busy)),
                   //execption
                   .is_exception          (excep_isexception),
                   .is_excep_return       (excep_id_isexcepreturn),
                   .excep_return_pc       (if_cp0_returnpc),
                   //output
-                  .pc_reg                (if_pc),
+                  .pc                    (if_pc),
                   .pc_4                  (if_pc4),
                   //exception
                   .excep_code            (if_excepcode),
-                  .execption_is_laddress (excep_if_laddrerror));
-
-bypass_fifo #(
-    .WIDTH(32),
-    .DEEP_SIZE(0)
-) inst_queue(
-    .clk(clk),
-    .reset(reset),
-    .read(inst_fetch),
-    .write(ibus_over),
-    .indata(inst),
-    .outdata(if_inst_q),
-    .empty(inst_q_empty),
-    .full()
-);
+                  //fetch instruction interface
+                  .inst_addr_valid       (inst_addr_valid),
+                  .inst_addr_ready       (inst_addr_ready),
+                  .inst_addr             (inst_addr      ),
+                  .inst_line_valid       (inst_line_valid),
+                  .inst_line_ready       (inst_line_ready),
+                  .inst_line             (inst_line      ),
+                  //pipe interface
+                  .inst_valid            (inst_valid),
+                  .inst_ready            (inst_ready),
+                  .inst                  (if_inst   ));
 
 always @ (posedge clk)
 begin
-    if (if_id_pipreg_clr)
-        {id_pc_pipreg,
+    if (reset|if_id_pipreg_clr)
+        {id_vld_pipreg,
+         id_pc_pipreg,
          id_pc4_pipreg,
          id_instruction_pipreg,
          id_excepcode_pipreg}
-     <= {32'b0,30'b0,`INST_INTI,`INVALID_EXCEP};
+     <= {1'b0,32'b0,30'b0,`INST_INTI,`INVALID_EXCEP};
     else if (if_id_pipreg_en)
-        {id_pc_pipreg,
+        {id_vld_pipreg,
+         id_pc_pipreg,
          id_pc4_pipreg,
          id_instruction_pipreg,
          id_excepcode_pipreg}
-     <= {if_pc,
+     <= {if_id_pipreg_en,
+         if_pc,
          if_pc4,
-         if_inst_q,
+         if_inst,
          if_excepcode};
 end
 
@@ -320,8 +304,9 @@ decode id(//input
 
 always @ (posedge clk)
 begin
-    if (id_ex_pipreg_clr)
-        {ex_instropreat_pipreg,
+    if (reset|id_ex_pipreg_clr)
+        {ex_vld_pipreg,
+         ex_instropreat_pipreg,
          ex_regaddress_pipreg,
          ex_copaddr_pipreg,
          ex_hilovalue_pipreg,
@@ -334,9 +319,10 @@ begin
          ex_bjpc_pipreg,
          ex_pc_pipreg,
          ex_excepcode_pipreg}
-     <= {252'b0,`INVALID_EXCEP};
+     <= {253'b0,`INVALID_EXCEP};
     else if (id_ex_pipreg_en)
-        {ex_instropreat_pipreg,
+        {ex_vld_pipreg,
+         ex_instropreat_pipreg,
          ex_regaddress_pipreg,
          ex_copaddr_pipreg,
          ex_hilovalue_pipreg,
@@ -349,7 +335,8 @@ begin
          ex_bjpc_pipreg,
          ex_pc_pipreg,
          ex_excepcode_pipreg}
-     <= {id_instropreat,
+     <= {id_vld_pipreg,
+         id_instropreat,
          id_regaddress,
          id_copaddr,
          id_hilovalue,
@@ -380,7 +367,7 @@ myexecute ex(//input
              .jump_branch_address       (ex_bjpc_pipreg),
              .id_pc                     (ex_pc_pipreg),
              .id_excep_code             (ex_excepcode_pipreg),
-             .is_busbusy                (bus_busy),
+             .is_busbusy                (dbus_busy),
               //output
              .inst_opreat_              (ex_instropreat),
              .write_reg_address         (ex_regaddress),
@@ -408,8 +395,9 @@ myexecute ex(//input
 
 always @ (posedge clk)
 begin
-    if (ex_am_pipreg_clr)
-        {am_instropreat_pipreg,
+    if (reset|ex_am_pipreg_clr)
+        {am_vld_pipreg,
+         am_instropreat_pipreg,
          am_regaddress_pipreg,
          am_regwdata_pipreg,
          am_hiwdata_pipreg,
@@ -422,9 +410,10 @@ begin
          am_rwmemaddr_pipreg,
          am_pc_pipreg,
          am_excepcode_pipreg}
-     <= {218'b0,`INVALID_EXCEP};
+     <= {219'b0,`INVALID_EXCEP};
     else if (ex_am_pipreg_en)
-        {am_instropreat_pipreg,
+        {am_vld_pipreg,
+         am_instropreat_pipreg,
          am_regaddress_pipreg,
          am_regwdata_pipreg,
          am_hiwdata_pipreg,
@@ -437,7 +426,8 @@ begin
          am_rwmemaddr_pipreg,
          am_pc_pipreg,
          am_excepcode_pipreg}
-     <= {ex_instropreat,
+     <= {ex_vld_pipreg,
+         ex_instropreat,
          ex_regaddress,
          ex_regwdata,
          ex_hiwdata,
@@ -473,20 +463,6 @@ cop0 syscrtl(//input
              .int_mask          (excep_cp0_intmask),
              .soft_int          (excep_cp0_softint),
              .errorpc           (if_cp0_returnpc));
-
-bypass_fifo #(
-    .WIDTH(32),
-    .DEEP_SIZE(0)
-) data_req_queue(
-    .clk(clk),
-    .reset(reset),
-    .read(data_tr_retire),
-    .write(dbus_over),
-    .indata(data_rdata),
-    .outdata(data_rdata_q),
-    .empty(data_q_empty),
-    .full()
-);
 
 accessmem am(//input
              .inst_opreat               (am_instropreat_pipreg),
@@ -525,18 +501,19 @@ accessmem am(//input
              .read_cop_data             (am_cop0_rdata),
              .write_cop_data            (cop0_am_wdata),
              //read write RAM
-             .mem_req                   (data_req),
+             .mem_req                   (data_valid),
              .mem_wr                    (data_wr),
              .mem_size                  (data_size),
              .mem_wstrb                 (data_wstrb),
              .mem_address_              (data_addr),
-             .read_mem_data             (data_rdata_q),
+             .read_mem_data             (data_rdata),
              .write_mem_data            (data_wdata));
 
 always @ (posedge clk)
 begin
-    if (am_wb_pipreg_clr)
-        {wb_instropreat_pipreg,
+    if (reset|am_wb_pipreg_clr)
+        {wb_vld_pipreg,
+         wb_instropreat_pipreg,
          wb_writereg_pipreg,
          wb_writehi_pipreg,
          wb_writelo_pipreg,
@@ -545,9 +522,10 @@ begin
          wb_hiwdata_pipreg,
          wb_lowdata_pipreg,
          wb_pc_pipreg}
-     <= 137'b0;
+     <= 138'b0;
     else if (am_wb_pipreg_en)
-        {wb_instropreat_pipreg,
+        {wb_vld_pipreg,
+         wb_instropreat_pipreg,
          wb_writereg_pipreg,
          wb_writehi_pipreg,
          wb_writelo_pipreg,
@@ -556,7 +534,8 @@ begin
          wb_hiwdata_pipreg,
          wb_lowdata_pipreg,
          wb_pc_pipreg}
-     <= {am_instropreat,
+     <= {am_vld_pipreg,
+         am_instropreat,
          cft_am_wreg,
          cft_am_whi,
          cft_am_wlo,
@@ -573,7 +552,7 @@ writeback wb(//input
              .rs                        (wb_cft_rs),
              .rt                        (wb_cft_rt),
              .inst_opreat               (wb_instropreat_pipreg),
-             .write_reg                 (wb_writereg_pipreg & wb_regfile_en),
+             .write_reg                 (wb_writereg_pipreg),
              .write_hi                  (wb_writehi_pipreg),
              .write_lo                  (wb_writelo_pipreg),
              .write_hi_value            (wb_hiwdata_pipreg),
@@ -624,9 +603,7 @@ conflict_ctrl_unit ctf_unit(//input
                             .reg_s_value_latest     (id_cft_rsvalue),
                             .reg_t_value_latest     (id_cft_rtvalue),
                             .hilo_value_latest      (id_cft_hilovalue),
-                            .pc_reg_en              (if_cft_pcen),
-                            .if_id_reg_en           (if_cft_pipen),
-                            .id_ex_reg_clr          (ex_cft_clr));
+                            .id_unlock              (id_cft_en));
 
 exception_ctrl excep_ctrl(//output
                           .is_exception  (excep_isexception),
@@ -640,7 +617,6 @@ exception_ctrl excep_ctrl(//output
                           .am_clr        (excep_amclr),
                           .wb_clr        (excep_wbclr),
                           //input
-                          .excep_ex_pc   (ex_pc_pipreg),
                           .excep_am_pc   (am_pc_pipreg),
                           .excep_wb_pc   (wb_pc_pipreg),
                           .wb_is_bj      (excep_wb_isbj),

@@ -8,9 +8,7 @@ module conflict_ctrl_unit(
     reg_s_value_latest,
     reg_t_value_latest,
     hilo_value_latest,
-    pc_reg_en,
-    if_id_reg_en,
-    id_ex_reg_clr,
+    id_unlock,
 //input
     id_is_use_reg_s,
     id_is_use_reg_t,
@@ -68,19 +66,13 @@ output wire [4:0] reg_t_id_read_address;
 output wire [31:0] reg_s_value_latest;
 output wire [31:0] reg_t_value_latest;
 output reg [31:0] hilo_value_latest;
-output wire pc_reg_en;
-output wire if_id_reg_en;
-output wire id_ex_reg_clr;
+output wire id_unlock;
 
 assign reg_s_id_read_address = id_reg_s;
 assign reg_t_id_read_address = id_reg_t;
 
-wire id_ex_regs_clr;
-wire id_ex_regt_clr;
-wire pc_regs_en;
-wire pc_regt_en;
-wire if_id_regs_en;
-wire if_id_regt_en;
+wire id_regs_unlock;
+wire id_regt_unlock;
 wire is_id_rs_zero;
 wire is_id_rt_zero;
 wire is_ex_rs_addr_same;
@@ -88,9 +80,7 @@ wire is_ex_rt_addr_same;
 wire is_am_rs_addr_same;
 wire is_am_rt_addr_same;
 
-assign id_ex_reg_clr = id_ex_regs_clr | id_ex_regt_clr;
-assign pc_reg_en = pc_regs_en & pc_regt_en;
-assign if_id_reg_en = if_id_regs_en & if_id_regt_en;
+assign id_unlock = id_regs_unlock & id_regt_unlock;
 assign is_id_rs_zero = ~(|id_reg_s);
 assign is_id_rt_zero = ~(|id_reg_t);
 assign is_ex_rs_addr_same = &(id_reg_s~^ex_write_reg_address);
@@ -102,9 +92,7 @@ assign is_am_rt_addr_same = &(id_reg_t~^am_write_reg_address);
  * 这里的assign语句与其下方的case语句功能相同，但是测试发现这里的assign语句性能更好。
  * case语句作为理解型代码不予删除。
  */
-assign pc_regs_en = ~(id_is_use_reg_s & (~is_id_rs_zero) & ex_is_write_reg & is_ex_rs_addr_same & (~ex_is_clean_reg));
-assign if_id_regs_en = ~(id_is_use_reg_s & (~is_id_rs_zero) & ex_is_write_reg & is_ex_rs_addr_same & (~ex_is_clean_reg));
-assign id_ex_regs_clr = id_is_use_reg_s & (~is_id_rs_zero) & ex_is_write_reg & is_ex_rs_addr_same & (~ex_is_clean_reg);
+assign id_regs_unlock = ~(id_is_use_reg_s & (~is_id_rs_zero) & ex_is_write_reg & is_ex_rs_addr_same & (~ex_is_clean_reg));
 assign reg_s_value_latest = ({32{ex_is_write_reg & is_ex_rs_addr_same}} & ex_write_reg_data)
                           | ({32{~(ex_is_write_reg & is_ex_rs_addr_same) & am_is_write_reg & is_am_rs_addr_same}} & am_write_reg_data)
                           | ({32{~(ex_is_write_reg & is_ex_rs_addr_same) & ~(am_is_write_reg & is_am_rs_addr_same)}} & wb_rs_value);
@@ -117,37 +105,27 @@ assign reg_s_value_latest = ({32{ex_is_write_reg & is_ex_rs_addr_same}} & ex_wri
 //           am_is_write_reg,is_am_rs_addr_same})
 //        7'b1_0_111_??://第三级数据前推
 //        begin
-//            pc_regs_en = 1'b1;
-//            if_id_regs_en = 1'b1;
-//            id_ex_regs_clr = 1'b0;
+//            id_regs_unlock = 1'b1;
 //            reg_s_value_latest = ex_write_reg_data;
 //        end
 //        7'b1_0_0??_11://第四级数据前推
 //        begin
-//            pc_regs_en = 1'b1;
-//            if_id_regs_en = 1'b1;
-//            id_ex_regs_clr = 1'b0;
+//            id_regs_unlock = 1'b1;
 //            reg_s_value_latest = am_write_reg_data;
 //        end
 //        7'b1_0_10?_11://第四级数据前推
 //        begin
-//            pc_regs_en = 1'b1;
-//            if_id_regs_en = 1'b1;
-//            id_ex_regs_clr = 1'b0;
+//            id_regs_unlock = 1'b1;
 //            reg_s_value_latest = am_write_reg_data;
 //        end
 //        7'b1_0_110_??://第三级暂停流水线
 //        begin
-//            pc_regs_en = 1'b0;
-//            if_id_regs_en = 1'b0;
-//            id_ex_regs_clr = 1'b1;
+//            id_regs_unlock = 1'b0;
 //            reg_s_value_latest = 32'b0;
 //        end
 //        default:
 //        begin
-//            pc_regs_en = 1'b1;
-//            if_id_regs_en = 1'b1;
-//            id_ex_regs_clr = 1'b0;
+//            id_regs_unlock = 1'b1;
 //            reg_s_value_latest = wb_rs_value;
 //        end
 //    endcase
@@ -157,9 +135,7 @@ assign reg_s_value_latest = ({32{ex_is_write_reg & is_ex_rs_addr_same}} & ex_wri
  * 这里的assign语句与其下方的case语句功能相同，但是测试发现这里的assign语句性能更好。
  * case语句作为理解型代码不予删除。
  */
-assign pc_regt_en = ~(id_is_use_reg_t & (~is_id_rt_zero) & ex_is_write_reg & is_ex_rt_addr_same & (~ex_is_clean_reg));
-assign if_id_regt_en = ~(id_is_use_reg_t & (~is_id_rt_zero) & ex_is_write_reg & is_ex_rt_addr_same & (~ex_is_clean_reg));
-assign id_ex_regt_clr = id_is_use_reg_t & (~is_id_rt_zero) & ex_is_write_reg & is_ex_rt_addr_same & (~ex_is_clean_reg);
+assign id_regt_unlock = ~(id_is_use_reg_t & (~is_id_rt_zero) & ex_is_write_reg & is_ex_rt_addr_same & (~ex_is_clean_reg));
 assign reg_t_value_latest = ({32{ex_is_write_reg & is_ex_rt_addr_same}} & ex_write_reg_data)
                           | ({32{~(ex_is_write_reg & is_ex_rt_addr_same) & am_is_write_reg & is_am_rt_addr_same}} & am_write_reg_data)
                           | ({32{~(ex_is_write_reg & is_ex_rt_addr_same) & ~(am_is_write_reg & is_am_rt_addr_same)}} & wb_rt_value);
@@ -171,37 +147,27 @@ assign reg_t_value_latest = ({32{ex_is_write_reg & is_ex_rt_addr_same}} & ex_wri
 //           am_is_write_reg,is_am_rt_addr_same})
 //        7'b1_0_111_??://第三级数据前推
 //        begin
-//            pc_regt_en = 1'b1;
-//            if_id_regt_en = 1'b1;
-//            id_ex_regt_clr = 1'b0;
+//            id_regt_unlock = 1'b1;
 //            reg_t_value_latest = ex_write_reg_data;
 //        end
 //        7'b1_0_0??_11://第四级数据前推
 //        begin
-//            pc_regt_en = 1'b1;
-//            if_id_regt_en = 1'b1;
-//            id_ex_regt_clr = 1'b0;
+//            id_regt_unlock = 1'b1;
 //            reg_t_value_latest = am_write_reg_data;
 //        end
 //        7'b1_0_10?_11://第四级数据前推
 //        begin
-//            pc_regt_en = 1'b1;
-//            if_id_regt_en = 1'b1;
-//            id_ex_regt_clr = 1'b0;
+//            id_regt_unlock = 1'b1;
 //            reg_t_value_latest = am_write_reg_data;
 //        end
 //        7'b1_0_110_??://第三级暂停流水线
 //        begin
-//            pc_regt_en = 1'b0;
-//            if_id_regt_en = 1'b0;
-//            id_ex_regt_clr = 1'b1;
+//            id_regt_unlock = 1'b0;
 //            reg_t_value_latest = 32'b0;
 //        end
 //        default:
 //        begin
-//            pc_regt_en = 1'b1;
-//            if_id_regt_en = 1'b1;
-//            id_ex_regt_clr = 1'b0;
+//            id_regt_unlock = 1'b1;
 //            reg_t_value_latest = wb_rt_value;
 //        end
 //    endcase

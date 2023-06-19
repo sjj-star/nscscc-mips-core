@@ -21,15 +21,15 @@ input wire [31:0] A;
 input wire [31:0] B;
 output wire [31:0] Q;
 output wire [31:0] R;
-output reg opreat_over;
+output wire opreat_over;
 
 reg [4:0] count;
-reg load;
+wire load;
 always @ (posedge clk)
 begin
     if(rst)
         count <= 5'd0;
-    else if((count == 5'd17)&(~is_busbusy))
+    else if((count == 5'd17)&is_busbusy)
         count <= 5'd17;
     else if(start)
         if(count == 5'd17)
@@ -40,26 +40,8 @@ begin
         count <= count;
 end
 
-always @ (*)
-begin
-    case(count)
-        5'd0:
-        begin
-            load = start;
-            opreat_over = ~start;
-        end
-        5'd17:
-        begin
-            load = is_busbusy;
-            opreat_over = 1'b1;
-        end
-        default:
-        begin
-            load = 1'b0;
-            opreat_over = 1'b0;
-        end
-    endcase
-end
+assign load = (count == 5'd0) ? start : 1'b0;
+assign opreat_over = (count == 5'd17) ? 1'b1 : (~start);
 
 reg [63:0] temp_result1;
 wire [63:0] temp1;

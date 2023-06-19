@@ -4,10 +4,12 @@
 module mmu(
     clk,
     reset,
-    inst_cpu_valid,
-    inst_cpu_ready,
+    inst_cpu_addr_valid,
+    inst_cpu_addr_ready,
     inst_cpu_addr,
-    inst_cpu_rdata,
+    inst_cpu_data_valid,
+    inst_cpu_data_ready,
+    inst_cpu_data,
     
     data_cpu_valid,
     data_cpu_ready,
@@ -85,10 +87,12 @@ module mmu(
 input wire clk;
 input wire reset;
 
-input wire inst_cpu_valid;
-output reg inst_cpu_ready;
+input wire inst_cpu_addr_valid;
+output wire inst_cpu_addr_ready;
 input wire [31:0] inst_cpu_addr;
-output reg [31:0] inst_cpu_rdata;
+output wire inst_cpu_data_valid;
+input wire inst_cpu_data_ready;
+input wire [31:0] inst_cpu_data;
 
 input wire data_cpu_valid;
 output wire data_cpu_ready;
@@ -99,7 +103,7 @@ input wire [31:0] data_cpu_addr;
 input wire [31:0] data_cpu_wdata;
 output reg [31:0] data_cpu_rdata;
 
-output wire [3 :0] data_awid   , inst_awid   ;
+output wire [0 :0] data_awid   , inst_awid   ;
 output wire [31:0] data_awaddr , inst_awaddr ;
 output wire [7 :0] data_awlen  , inst_awlen  ;
 output wire [2 :0] data_awsize , inst_awsize ;
@@ -112,11 +116,11 @@ output wire [3 :0] data_wstrb  , inst_wstrb  ;
 output reg         data_wlast  , inst_wlast  ;
 output reg         data_wvalid , inst_wvalid ;
 input  wire        data_wready , inst_wready ;
-input  wire [3 :0] data_bid    , inst_bid    ;
+input  wire [0 :0] data_bid    , inst_bid    ;
 input  wire [1 :0] data_bresp  , inst_bresp  ;
 input  wire        data_bvalid , inst_bvalid ;
 output wire        data_bready , inst_bready ;
-output wire [3 :0] data_arid   , inst_arid   ;
+output wire [0 :0] data_arid   , inst_arid   ;
 output wire [31:0] data_araddr , inst_araddr ;
 output wire [7 :0] data_arlen  , inst_arlen  ;
 output wire [2 :0] data_arsize , inst_arsize ;
@@ -124,7 +128,7 @@ output wire [1 :0] data_arburst, inst_arburst;
 output reg  [3 :0] data_arcache, inst_arcache;
 output reg         data_arvalid, inst_arvalid;
 input  wire        data_arready, inst_arready;
-input  wire [3 :0] data_rid    , inst_rid    ;
+input  wire [0 :0] data_rid    , inst_rid    ;
 input  wire [31:0] data_rdata  , inst_rdata  ;
 input  wire [1 :0] data_rresp  , inst_rresp  ;
 input  wire        data_rlast  , inst_rlast  ;
@@ -219,7 +223,7 @@ localparam HANDSHAK = 2'd2;
 
 /* CPU Data Port, Start*/
 reg data_cpu_wready, data_cpu_rready;
-assign data_awid    = 4'b0;
+assign data_awid    = 1'b0;
 assign data_awaddr  = data_mem_addr;
 assign data_awlen   = 8'b0;
 assign data_awsize  = {1'b0, data_cpu_size};
@@ -227,7 +231,7 @@ assign data_awburst = 2'b1;
 assign data_wdata   = data_cpu_wdata;
 assign data_wstrb   = data_cpu_wstrb;
 assign data_bready  = 1'b1;
-assign data_arid    = 4'b0;
+assign data_arid    = 1'b0;
 assign data_araddr  = data_mem_addr;
 assign data_arlen   = 8'b0;
 assign data_arsize  = {1'b0, data_cpu_size};
@@ -386,7 +390,7 @@ assign data_cpu_ready = data_cpu_wready | data_cpu_rready;
 /* CPU Data Port, End*/
 
 /* CPU Instruction Port, Start*/
-assign inst_awid    = 4'b0;
+assign inst_awid    = 1'b0;
 assign inst_awaddr  = 32'b0;
 assign inst_awlen   = 8'b0;
 assign inst_awsize  = 3'b0;
@@ -394,12 +398,12 @@ assign inst_awburst = 2'b0;
 assign inst_wdata   = 32'b0;
 assign inst_wstrb   = 4'b0;
 assign inst_bready  = 1'b0;
-assign inst_arid    = 4'b0;
+assign inst_arid    = 1'b0;
 assign inst_araddr  = inst_mem_addr;
 assign inst_arlen   = 8'b0;
 assign inst_arsize  = 3'd2;
 assign inst_arburst = 2'b1;
-assign inst_rready  = 1'b1;
+assign inst_rready  = inst_cpu_data_ready;
 
 /* AXI Write transcation Handshak State Machine, Start */
 always @(posedge clk) begin
@@ -412,56 +416,12 @@ end
 /* AXI Write transcation Handshak State Machine, End */
 
 /* AXI Read transcation Handshak State Machine, Start */
-reg [1:0] I_AR_S;
-reg [1:0] I_AR_NS;
-
-always @(posedge clk) begin
-    if(reset) begin
-        I_AR_S <= IDLE;
-    end
-    else begin
-        I_AR_S <= I_AR_NS;
-    end
-end
-
 always @* begin
-    I_AR_NS = IDLE;
-    inst_arvalid = 1'b0;
-    inst_cpu_rdata = 32'b0;
-    inst_cpu_ready = 1'b0;
-
-    case(I_AR_S)
-    IDLE: begin
-        inst_arvalid = inst_cpu_valid;
-
-        if(inst_arvalid & inst_arready)
-            I_AR_NS = HANDSHAK;
-        else if(inst_arvalid)
-            I_AR_NS = WAIT;
-        else
-            I_AR_NS = IDLE;
-    end
-    WAIT: begin
-        inst_arvalid = 1'b1;
-        if(inst_arready)
-            I_AR_NS = HANDSHAK;
-        else
-            I_AR_NS = WAIT;
-    end
-    HANDSHAK: begin
-        inst_arvalid = 1'b0;
-
-        if(inst_rvalid & inst_rlast) begin
-            inst_cpu_rdata = inst_rdata;
-            inst_cpu_ready = 1'b1;
-            I_AR_NS = IDLE;
-        end
-        else begin
-            I_AR_NS = HANDSHAK;
-        end
-    end
-    endcase
+    inst_arvalid = inst_cpu_addr_valid;
 end
+assign inst_cpu_addr_ready = inst_arready;
+assign inst_cpu_data       = inst_rdata;
+assign inst_cpu_data_valid = inst_rvalid;
 /* AXI Read transcation Handshak State Machine, End */
 /* CPU Instruction Port, End*/
 

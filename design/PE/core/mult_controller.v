@@ -18,7 +18,7 @@ input wire rst;
 input wire start;
 input wire sign;
 input wire is_busbusy;
-output reg opreat_over;
+output wire opreat_over;
 input wire [31:0] A;
 input wire [31:0] B;
 output wire [63:0] P;
@@ -30,7 +30,7 @@ always @ (posedge clk)
 begin
     if(rst)
         count <= 2'd0;
-    else if((count == 2'd2)&(~is_busbusy))
+    else if((count == 2'd2)&is_busbusy)
         count <= count;
     else if(start)
         if(count == 2'd2)
@@ -41,16 +41,6 @@ begin
         count <= count;
 end
 
-always @ (*)
-begin
-    case(count)
-        2'd0:
-            opreat_over = ~start;
-        2'd2:
-            opreat_over = 1'b1;
-        default:
-            opreat_over = 1'b0;
-    endcase
-end
+assign opreat_over = (count == 2'd2) ? 1'b1 : (~start);
 
 endmodule

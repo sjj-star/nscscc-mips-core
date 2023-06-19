@@ -14,7 +14,6 @@ module exception_ctrl(
     am_clr,
     wb_clr,
 //input
-    excep_ex_pc,
     excep_am_pc,
     excep_wb_pc,
     is_instload,
@@ -27,7 +26,6 @@ module exception_ctrl(
     soft_int,
     am_excep_code);
 
-input wire [31:0] excep_ex_pc;
 input wire [31:0] excep_am_pc;
 input wire [31:0] excep_wb_pc;
 input wire is_instload;
@@ -125,8 +123,10 @@ always @ (*)
 begin
     if(wb_is_bj)
         excep_pc = excep_wb_pc;
-    else if(|({hardware_int,soft_int}&int_mask))
-        excep_pc = excep_ex_pc;
+    // else if(|({hardware_int,2'b0}&int_mask))
+    //     excep_pc = excep_am_pc;
+    else if(|({6'b0,soft_int}&int_mask))
+        excep_pc = {excep_am_pc[31:2]+30'd1,excep_am_pc[1:0]};
     else
         excep_pc = excep_am_pc;
 end

@@ -108,10 +108,12 @@ output wire [31:0]  debug_wb_rf_wdata;
 
 wire reset = ~aresetn;
 
-wire inst_valid;
-wire inst_ready;
+wire        inst_addr_valid;
+wire        inst_addr_ready;
 wire [31:0] inst_addr;
-wire [31:0] inst;
+wire        inst_line_valid;
+wire        inst_line_ready;
+wire [31:0] inst_line;
 
 wire data_cpu_valid;
 wire data_cpu_ready;
@@ -122,52 +124,86 @@ wire [31:0] data_cpu_addr;
 wire [31:0] data_cpu_wdata;
 wire [31:0] data_cpu_rdata;
 
-wire [3 :0] data_awid   , inst_awid   , mem_awid   ;
-wire [31:0] data_awaddr , inst_awaddr , mem_awaddr ;
-wire [7 :0] data_awlen  , inst_awlen  , mem_awlen  ;
-wire [2 :0] data_awsize , inst_awsize , mem_awsize ;
-wire [1 :0] data_awburst, inst_awburst, mem_awburst;
-wire [0 :0]                             mem_awlock ;
-wire [3 :0] data_awcache, inst_awcache, mem_awcache;
-wire [2 :0]                             mem_awprot ;
-wire [3 :0]                             mem_awqos  ;
-wire        data_awvalid, inst_awvalid, mem_awvalid;
-wire        data_awready, inst_awready, mem_awready;
-wire [31:0] data_wdata  , inst_wdata  , mem_wdata  ;
-wire [3 :0] data_wstrb  , inst_wstrb  , mem_wstrb  ;
-wire        data_wlast  , inst_wlast  , mem_wlast  ;
-wire        data_wvalid , inst_wvalid , mem_wvalid ;
-wire        data_wready , inst_wready , mem_wready ;
-wire [3 :0] data_bid    , inst_bid    , mem_bid    ;
-wire [1 :0] data_bresp  , inst_bresp  , mem_bresp  ;
-wire        data_bvalid , inst_bvalid , mem_bvalid ;
-wire        data_bready , inst_bready , mem_bready ;
-wire [3 :0] data_arid   , inst_arid   , mem_arid   ;
-wire [31:0] data_araddr , inst_araddr , mem_araddr ;
-wire [7 :0] data_arlen  , inst_arlen  , mem_arlen  ;
-wire [2 :0] data_arsize , inst_arsize , mem_arsize ;
-wire [1 :0] data_arburst, inst_arburst, mem_arburst;
-wire [0 :0]                             mem_arlock ;
-wire [3 :0] data_arcache, inst_arcache, mem_arcache;
-wire [2 :0]                             mem_arprot ;
-wire [3 :0]                             mem_arqos  ;
-wire        data_arvalid, inst_arvalid, mem_arvalid;
-wire        data_arready, inst_arready, mem_arready;
-wire [3 :0] data_rid    , inst_rid    , mem_rid    ;
-wire [31:0] data_rdata  , inst_rdata  , mem_rdata  ;
-wire [1 :0] data_rresp  , inst_rresp  , mem_rresp  ;
-wire        data_rlast  , inst_rlast  , mem_rlast  ;
-wire        data_rvalid , inst_rvalid , mem_rvalid ;
-wire        data_rready , inst_rready , mem_rready ;
+wire [0 :0] data_awid   , inst_awid   ;
+wire [31:0] data_awaddr , inst_awaddr ;
+wire [7 :0] data_awlen  , inst_awlen  ;
+wire [2 :0] data_awsize , inst_awsize ;
+wire [1 :0] data_awburst, inst_awburst;
+wire [3 :0] data_awcache, inst_awcache;
+wire        data_awvalid, inst_awvalid;
+wire        data_awready, inst_awready;
+wire [31:0] data_wdata  , inst_wdata  ;
+wire [3 :0] data_wstrb  , inst_wstrb  ;
+wire        data_wlast  , inst_wlast  ;
+wire        data_wvalid , inst_wvalid ;
+wire        data_wready , inst_wready ;
+wire [0 :0] data_bid    , inst_bid    ;
+wire [1 :0] data_bresp  , inst_bresp  ;
+wire        data_bvalid , inst_bvalid ;
+wire        data_bready , inst_bready ;
+wire [0 :0] data_arid   , inst_arid   ;
+wire [31:0] data_araddr , inst_araddr ;
+wire [7 :0] data_arlen  , inst_arlen  ;
+wire [2 :0] data_arsize , inst_arsize ;
+wire [1 :0] data_arburst, inst_arburst;
+wire [3 :0] data_arcache, inst_arcache;
+wire        data_arvalid, inst_arvalid;
+wire        data_arready, inst_arready;
+wire [0 :0] data_rid    , inst_rid    ;
+wire [31:0] data_rdata  , inst_rdata  ;
+wire [1 :0] data_rresp  , inst_rresp  ;
+wire        data_rlast  , inst_rlast  ;
+wire        data_rvalid , inst_rvalid ;
+wire        data_rready , inst_rready ;
+
+wire [3 :0] mem_awid   ;
+wire [31:0] mem_awaddr ;
+wire [7 :0] mem_awlen  ;
+wire [2 :0] mem_awsize ;
+wire [1 :0] mem_awburst;
+wire [0 :0] mem_awlock ;
+wire [3 :0] mem_awcache;
+wire [2 :0] mem_awprot ;
+wire [3 :0] mem_awqos  ;
+wire        mem_awvalid;
+wire        mem_awready;
+wire [31:0] mem_wdata  ;
+wire [3 :0] mem_wstrb  ;
+wire        mem_wlast  ;
+wire        mem_wvalid ;
+wire        mem_wready ;
+wire [3 :0] mem_bid    ;
+wire [1 :0] mem_bresp  ;
+wire        mem_bvalid ;
+wire        mem_bready ;
+wire [3 :0] mem_arid   ;
+wire [31:0] mem_araddr ;
+wire [7 :0] mem_arlen  ;
+wire [2 :0] mem_arsize ;
+wire [1 :0] mem_arburst;
+wire [0 :0] mem_arlock ;
+wire [3 :0] mem_arcache;
+wire [2 :0] mem_arprot ;
+wire [3 :0] mem_arqos  ;
+wire        mem_arvalid;
+wire        mem_arready;
+wire [3 :0] mem_rid    ;
+wire [31:0] mem_rdata  ;
+wire [1 :0] mem_rresp  ;
+wire        mem_rlast  ;
+wire        mem_rvalid ;
+wire        mem_rready ;
 
 pipeline_cpu cpu(
     .clk                   (aclk             ),
     .reset                 (reset            ),
     .int                   (int              ),
-    .inst_valid            (inst_valid       ),
-    .inst_ready            (inst_ready       ),
+    .inst_addr_valid       (inst_addr_valid  ),
+    .inst_addr_ready       (inst_addr_ready  ),
     .inst_addr             (inst_addr        ),
-    .inst                  (inst             ),
+    .inst_line_valid       (inst_line_valid  ),
+    .inst_line_ready       (inst_line_ready  ),
+    .inst_line             (inst_line        ),
     .data_valid            (data_cpu_valid   ),
     .data_ready            (data_cpu_ready   ),
     .data_wr               (data_cpu_wr      ),
@@ -183,82 +219,84 @@ pipeline_cpu cpu(
 );
 
 mmu memory_management_unit(
-    .clk            (aclk             ),
-    .reset          (reset            ),
-    .inst_cpu_valid (inst_valid       ),
-    .inst_cpu_ready (inst_ready       ),
-    .inst_cpu_addr  (inst_addr        ),
-    .inst_cpu_rdata (inst             ),
-    .data_cpu_valid (data_cpu_valid   ),
-    .data_cpu_ready (data_cpu_ready   ),
-    .data_cpu_wr    (data_cpu_wr      ),
-    .data_cpu_size  (data_cpu_size    ),
-    .data_cpu_wstrb (data_cpu_wstrb   ),
-    .data_cpu_addr  (data_cpu_addr    ),
-    .data_cpu_wdata (data_cpu_wdata   ),
-    .data_cpu_rdata (data_cpu_rdata   ),
-    .data_awid      (data_awid        ),
-    .data_awaddr    (data_awaddr      ),
-    .data_awlen     (data_awlen       ),
-    .data_awsize    (data_awsize      ),
-    .data_awburst   (data_awburst     ),
-    .data_awcache   (data_awcache     ),
-    .data_awvalid   (data_awvalid     ),
-    .data_awready   (data_awready     ),
-    .data_wdata     (data_wdata       ),
-    .data_wstrb     (data_wstrb       ),
-    .data_wlast     (data_wlast       ),
-    .data_wvalid    (data_wvalid      ),
-    .data_wready    (data_wready      ),
-    .data_bid       (data_bid         ),
-    .data_bresp     (data_bresp       ),
-    .data_bvalid    (data_bvalid      ),
-    .data_bready    (data_bready      ),
-    .data_arid      (data_arid        ),
-    .data_araddr    (data_araddr      ),
-    .data_arlen     (data_arlen       ),
-    .data_arsize    (data_arsize      ),
-    .data_arburst   (data_arburst     ),
-    .data_arcache   (data_arcache     ),
-    .data_arvalid   (data_arvalid     ),
-    .data_arready   (data_arready     ),
-    .data_rid       (data_rid         ),
-    .data_rdata     (data_rdata       ),
-    .data_rresp     (data_rresp       ),
-    .data_rlast     (data_rlast       ),
-    .data_rvalid    (data_rvalid      ),
-    .data_rready    (data_rready      ),
-    .inst_awid      (inst_awid        ),
-    .inst_awaddr    (inst_awaddr      ),
-    .inst_awlen     (inst_awlen       ),
-    .inst_awsize    (inst_awsize      ),
-    .inst_awburst   (inst_awburst     ),
-    .inst_awcache   (inst_awcache     ),
-    .inst_awvalid   (inst_awvalid     ),
-    .inst_awready   (inst_awready     ),
-    .inst_wdata     (inst_wdata       ),
-    .inst_wstrb     (inst_wstrb       ),
-    .inst_wlast     (inst_wlast       ),
-    .inst_wvalid    (inst_wvalid      ),
-    .inst_wready    (inst_wready      ),
-    .inst_bid       (inst_bid         ),
-    .inst_bresp     (inst_bresp       ),
-    .inst_bvalid    (inst_bvalid      ),
-    .inst_bready    (inst_bready      ),
-    .inst_arid      (inst_arid        ),
-    .inst_araddr    (inst_araddr      ),
-    .inst_arlen     (inst_arlen       ),
-    .inst_arsize    (inst_arsize      ),
-    .inst_arburst   (inst_arburst     ),
-    .inst_arcache   (inst_arcache     ),
-    .inst_arvalid   (inst_arvalid     ),
-    .inst_arready   (inst_arready     ),
-    .inst_rid       (inst_rid         ),
-    .inst_rdata     (inst_rdata       ),
-    .inst_rresp     (inst_rresp       ),
-    .inst_rlast     (inst_rlast       ),
-    .inst_rvalid    (inst_rvalid      ),
-    .inst_rready    (inst_rready      )
+    .clk                 (aclk             ),
+    .reset               (reset            ),
+    .inst_cpu_addr_valid (inst_addr_valid  ),
+    .inst_cpu_addr_ready (inst_addr_ready  ),
+    .inst_cpu_addr       (inst_addr        ),
+    .inst_cpu_data_valid (inst_line_valid  ),
+    .inst_cpu_data_ready (inst_line_ready  ),
+    .inst_cpu_data       (inst_line        ),
+    .data_cpu_valid      (data_cpu_valid   ),
+    .data_cpu_ready      (data_cpu_ready   ),
+    .data_cpu_wr         (data_cpu_wr      ),
+    .data_cpu_size       (data_cpu_size    ),
+    .data_cpu_wstrb      (data_cpu_wstrb   ),
+    .data_cpu_addr       (data_cpu_addr    ),
+    .data_cpu_wdata      (data_cpu_wdata   ),
+    .data_cpu_rdata      (data_cpu_rdata   ),
+    .data_awid           (data_awid        ),
+    .data_awaddr         (data_awaddr      ),
+    .data_awlen          (data_awlen       ),
+    .data_awsize         (data_awsize      ),
+    .data_awburst        (data_awburst     ),
+    .data_awcache        (data_awcache     ),
+    .data_awvalid        (data_awvalid     ),
+    .data_awready        (data_awready     ),
+    .data_wdata          (data_wdata       ),
+    .data_wstrb          (data_wstrb       ),
+    .data_wlast          (data_wlast       ),
+    .data_wvalid         (data_wvalid      ),
+    .data_wready         (data_wready      ),
+    .data_bid            (data_bid         ),
+    .data_bresp          (data_bresp       ),
+    .data_bvalid         (data_bvalid      ),
+    .data_bready         (data_bready      ),
+    .data_arid           (data_arid        ),
+    .data_araddr         (data_araddr      ),
+    .data_arlen          (data_arlen       ),
+    .data_arsize         (data_arsize      ),
+    .data_arburst        (data_arburst     ),
+    .data_arcache        (data_arcache     ),
+    .data_arvalid        (data_arvalid     ),
+    .data_arready        (data_arready     ),
+    .data_rid            (data_rid         ),
+    .data_rdata          (data_rdata       ),
+    .data_rresp          (data_rresp       ),
+    .data_rlast          (data_rlast       ),
+    .data_rvalid         (data_rvalid      ),
+    .data_rready         (data_rready      ),
+    .inst_awid           (inst_awid        ),
+    .inst_awaddr         (inst_awaddr      ),
+    .inst_awlen          (inst_awlen       ),
+    .inst_awsize         (inst_awsize      ),
+    .inst_awburst        (inst_awburst     ),
+    .inst_awcache        (inst_awcache     ),
+    .inst_awvalid        (inst_awvalid     ),
+    .inst_awready        (inst_awready     ),
+    .inst_wdata          (inst_wdata       ),
+    .inst_wstrb          (inst_wstrb       ),
+    .inst_wlast          (inst_wlast       ),
+    .inst_wvalid         (inst_wvalid      ),
+    .inst_wready         (inst_wready      ),
+    .inst_bid            (inst_bid         ),
+    .inst_bresp          (inst_bresp       ),
+    .inst_bvalid         (inst_bvalid      ),
+    .inst_bready         (inst_bready      ),
+    .inst_arid           (inst_arid        ),
+    .inst_araddr         (inst_araddr      ),
+    .inst_arlen          (inst_arlen       ),
+    .inst_arsize         (inst_arsize      ),
+    .inst_arburst        (inst_arburst     ),
+    .inst_arcache        (inst_arcache     ),
+    .inst_arvalid        (inst_arvalid     ),
+    .inst_arready        (inst_arready     ),
+    .inst_rid            (inst_rid         ),
+    .inst_rdata          (inst_rdata       ),
+    .inst_rresp          (inst_rresp       ),
+    .inst_rlast          (inst_rlast       ),
+    .inst_rvalid         (inst_rvalid      ),
+    .inst_rready         (inst_rready      )
 );
 
 core_cache_axi L2_cache (
@@ -280,8 +318,8 @@ core_cache_axi L2_cache (
   .S0_AXI_WLAST   ( inst_wlast   ),
   .S0_AXI_WVALID  ( inst_wvalid  ),
   .S0_AXI_WREADY  ( inst_wready  ),
-  .S0_AXI_BRESP   ( inst_bid     ),
-  .S0_AXI_BID     ( inst_bresp   ),
+  .S0_AXI_BRESP   ( inst_bresp   ),
+  .S0_AXI_BID     ( inst_bid     ),
   .S0_AXI_BVALID  ( inst_bvalid  ),
   .S0_AXI_BREADY  ( inst_bready  ),
   .S0_AXI_ARID    ( inst_arid    ),
@@ -317,8 +355,8 @@ core_cache_axi L2_cache (
   .S1_AXI_WLAST   ( data_wlast   ),
   .S1_AXI_WVALID  ( data_wvalid  ),
   .S1_AXI_WREADY  ( data_wready  ),
-  .S1_AXI_BRESP   ( data_bid     ),
-  .S1_AXI_BID     ( data_bresp   ),
+  .S1_AXI_BRESP   ( data_bresp   ),
+  .S1_AXI_BID     ( data_bid     ),
   .S1_AXI_BVALID  ( data_bvalid  ),
   .S1_AXI_BREADY  ( data_bready  ),
   .S1_AXI_ARID    ( data_arid    ),
@@ -354,8 +392,8 @@ core_cache_axi L2_cache (
   .M0_AXI_WLAST   ( mem_wlast   ),
   .M0_AXI_WVALID  ( mem_wvalid  ),
   .M0_AXI_WREADY  ( mem_wready  ),
-  .M0_AXI_BRESP   ( mem_bid     ),
-  .M0_AXI_BID     ( mem_bresp   ),
+  .M0_AXI_BRESP   ( mem_bresp   ),
+  .M0_AXI_BID     ( mem_bid     ),
   .M0_AXI_BVALID  ( mem_bvalid  ),
   .M0_AXI_BREADY  ( mem_bready  ),
   .M0_AXI_ARID    ( mem_arid    ),
