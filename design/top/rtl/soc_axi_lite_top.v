@@ -106,7 +106,7 @@ end
     begin
         clk_sim = 1'b0;
     end
-    always #((1000/130)/2) clk_sim = ~clk_sim;
+    always #((1000.0/130.0)/2) clk_sim = ~clk_sim;
     assign cpu_clk = clk_sim;
     assign sys_clk = clk;
 `else

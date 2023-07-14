@@ -197,7 +197,7 @@ wire        mem_rready ;
 pipeline_cpu cpu(
     .clk                   (aclk             ),
     .reset                 (reset            ),
-    .int                   (int              ),
+    .hw_int                (int              ),
     .inst_addr_valid       (inst_addr_valid  ),
     .inst_addr_ready       (inst_addr_ready  ),
     .inst_addr             (inst_addr        ),

@@ -13,6 +13,7 @@ module decode(
     is_write_hi,
     is_write_lo,
     jump_branch_address,
+	btb_addr_fail,
     cop_address,
     //check confict
     check_is_use_reg_s,
@@ -30,6 +31,7 @@ module decode(
 //input
     inst,
     pc_delayslot,
+	predict_pc,
     reg_s_value_latest,
     reg_t_value_latest,
     hilo_value_latest,
@@ -40,12 +42,13 @@ module decode(
 
 input  wire [31:0] inst;
 input  wire [29:0] pc_delayslot;
+input  wire [31:0] predict_pc;
 input  wire [31:0] reg_s_value_latest;
 input  wire [31:0] reg_t_value_latest;
 input  wire [31:0] hilo_value_latest;
 input  wire [4:0]  if_excep_code;
 input  wire [31:0] if_pc;
-output wire [43:0] inst_opreat;
+output wire [44:0] inst_opreat;
 output wire [4:0]  reg_t_d_31;
 output wire [31:0] reg_t_value;
 output wire [31:0] alu_opreatA;
@@ -55,6 +58,7 @@ output wire        is_write_reg;
 output wire        is_write_hi;
 output wire        is_write_lo;
 output wire [31:0] jump_branch_address;
+output wire        btb_addr_fail;
 output wire [7:0]  cop_address;
 output wire        check_is_use_reg_s;
 output wire        check_is_use_reg_t;
@@ -169,6 +173,8 @@ wire check_is_clean_reg = inst_add | inst_addi | inst_addu | inst_addiu | inst_s
                           inst_srav | inst_srl | inst_srlv | inst_jal | inst_jalr | inst_bgezal | inst_bltzal|
                           inst_mflo | inst_mfhi;
 
+wire is_ret = inst_jr & (&rs);
+
 /* am */
 wire inst_writereg_exdata = (inst_add|inst_addi|inst_addu|inst_addiu|inst_sub|inst_subu|inst_slt|inst_slti|
                              inst_sltu|inst_sltiu|inst_and|inst_andi|inst_lui|inst_nor|inst_or|inst_ori|
@@ -219,6 +225,7 @@ assign inst_opreat = {/* ex */
                       inst_bltz|inst_bltzal,
                       inst_bgez|inst_bgezal,
                       inst_jalr|inst_jr|inst_jal|inst_j,
+					  is_ret,
                       check_is_clean_reg,
                       /* am */
                       inst_writereg_exdata,
@@ -268,6 +275,8 @@ assign branch_address = {(pc_delayslot + {{14{offset[15]}},offset}),2'b0};
 assign jump_branch_address = ({32{inst_beq | inst_bne | inst_bgez | inst_bgtz | inst_blez | inst_bltz | inst_bgezal | inst_bltzal}} & branch_address)
                            | ({32{inst_jr | inst_jalr}} & reg_s_value_latest)
                            | ({32{inst_j | inst_jal}} & {pc_delayslot[29:26],target,2'b00});
+
+assign btb_addr_fail = |(jump_branch_address ^ predict_pc);
 
 //always @ (*)
 //begin

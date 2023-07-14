@@ -4,7 +4,7 @@
 module pipeline_cpu(
     clk,
     reset,
-    int,
+    hw_int,
     inst_addr_valid,
     inst_addr_ready,
     inst_addr,
@@ -27,7 +27,7 @@ module pipeline_cpu(
 
 input  wire        clk;
 input  wire        reset;
-input  wire [5:0]  int;
+input  wire [5:0]  hw_int;
 output wire        inst_addr_valid;
 input  wire        inst_addr_ready;
 output wire [31:0] inst_addr;
@@ -54,22 +54,52 @@ output wire [31:0] debug_wb_rf_wdata;
 *如果是寄存器的控制信号则统一指出控制信号来自哪一级以及用途，其格式不做具体要求
 */
 
+localparam IFQ_ENTRY = 16;
+localparam GLOBAL_WIDTH = 15;
+localparam LOCAL_WIDTH = 4;
+localparam BTB_SET_WIDTH = 8;
+localparam BTB_WAY_NUM = 4;
+localparam B_PATTEN_WIDTH = 2;
+localparam G_PATTEN_WIDTH = 3;
+localparam PHT_WIDTH = LOCAL_WIDTH+B_PATTEN_WIDTH*(2**LOCAL_WIDTH);
+
 wire [31:0] if_ex_bjpc;
 wire        if_ex_isbj;
+wire [31:0] if_ex_fail_branch;
+wire [BTB_WAY_NUM-1:0] if_ex_fail_way_vec;
+wire [LOCAL_WIDTH-1:0] if_ex_fill_pht_history;
+wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] if_ex_fill_pht_patten_tab;
+wire [GLOBAL_WIDTH-1:0] if_ex_fail_ghr;
+wire [G_PATTEN_WIDTH-1:0] if_ex_fill_ghr_patten;
+wire [GLOBAL_WIDTH-1:0] if_ex_fill_ghr;
 wire [31:0] if_pc;
 wire [29:0] if_pc4;
 wire [31:0] if_inst;
 wire [4:0]  if_excepcode;
+wire [BTB_WAY_NUM-1:0] if_btb_way_vec;
+wire if_predict_is_branch;
+wire [31:0] if_predict_pc;
+wire [LOCAL_WIDTH-1:0] if_pht_history;
+wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] if_pht_patten_tab;
+wire [GLOBAL_WIDTH-1:0] if_ghr;
+wire [G_PATTEN_WIDTH-1:0] if_ghr_patten;
 reg  [31:0] id_instruction_pipreg;
 wire        id_cft_en;
 reg         id_vld_pipreg;
 reg  [31:0] id_pc_pipreg;
 reg  [29:0] id_pc4_pipreg;
+reg [BTB_WAY_NUM-1:0] id_btb_way_vec_pipreg;
+reg id_predict_is_branch_pipreg;
+reg [31:0] id_predict_pc_pipreg;
+reg [LOCAL_WIDTH-1:0] id_pht_history_pipreg;
+reg [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] id_pht_patten_tab_pipreg;
+reg [GLOBAL_WIDTH-1:0] id_ghr_pipreg;
+reg [G_PATTEN_WIDTH-1:0] id_ghr_patten_pipreg;
 reg  [4:0]  id_excepcode_pipreg;
 wire [31:0] id_cft_rsvalue;
 wire [31:0] id_cft_rtvalue;
 wire [31:0] id_cft_hilovalue;
-wire [43:0] id_instropreat;
+wire [44:0] id_instropreat;
 wire [4:0]  id_regaddress;
 wire [7:0]  id_copaddr;
 wire [31:0] id_hilovalue;
@@ -77,6 +107,7 @@ wire        id_iswritereg;
 wire        id_iswritehi;
 wire        id_iswritelo;
 wire [31:0] id_bjpc;
+wire        id_btb_addr_fail;
 wire [31:0] id_rtvalue;
 wire [31:0] id_aluopA;
 wire [31:0] id_aluopB;
@@ -89,7 +120,7 @@ wire [4:0]  cft_id_rs;
 wire [4:0]  cft_id_rt;
 wire [31:0] id_pc;
 reg         ex_vld_pipreg;
-reg  [43:0] ex_instropreat_pipreg;
+reg  [44:0] ex_instropreat_pipreg;
 reg  [4:0]  ex_regaddress_pipreg;
 reg  [7:0]  ex_copaddr_pipreg;
 reg  [31:0] ex_hilovalue_pipreg;
@@ -101,6 +132,13 @@ reg         ex_iswritehi_pipreg;
 reg         ex_iswritelo_pipreg;
 reg  [31:0] ex_bjpc_pipreg;
 reg  [31:0] ex_pc_pipreg;
+reg         ex_btb_addr_fail_pipreg;
+reg [BTB_WAY_NUM-1:0] ex_btb_way_vec_pipreg;
+reg ex_predict_is_branch_pipreg;
+reg [LOCAL_WIDTH-1:0] ex_pht_history_pipreg;
+reg [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] ex_pht_patten_tab_pipreg;
+reg [GLOBAL_WIDTH-1:0] ex_ghr_pipreg;
+reg [G_PATTEN_WIDTH-1:0] ex_ghr_patten_pipreg;
 reg  [4:0]  ex_excepcode_pipreg;
 wire [9:0]  ex_instropreat;
 wire [4:0]  ex_regaddress;
@@ -221,31 +259,55 @@ assign ex_am_pipreg_en  = ex_opover & (~dbus_busy);
 assign am_wb_pipreg_clr = ((~am_wb_pipreg_en) & wb_writereg_pipreg)|excep_wbclr;
 assign am_wb_pipreg_en  = ~dbus_busy;
 
-inst_fetch if_unit(//input
-                  .clk                   (clk),
-                  .rst                   (reset),
-                  .jump_branch_address   (if_ex_bjpc),
-                  .is_jump_branch        (if_ex_isbj&id_vld_pipreg&(~dbus_busy)),
-                  //execption
-                  .is_exception          (excep_isexception),
-                  .is_excep_return       (excep_id_isexcepreturn),
-                  .excep_return_pc       (if_cp0_returnpc),
-                  //output
-                  .pc                    (if_pc),
-                  .pc_4                  (if_pc4),
-                  //exception
-                  .excep_code            (if_excepcode),
-                  //fetch instruction interface
-                  .inst_addr_valid       (inst_addr_valid),
-                  .inst_addr_ready       (inst_addr_ready),
-                  .inst_addr             (inst_addr      ),
-                  .inst_line_valid       (inst_line_valid),
-                  .inst_line_ready       (inst_line_ready),
-                  .inst_line             (inst_line      ),
-                  //pipe interface
-                  .inst_valid            (inst_valid),
-                  .inst_ready            (inst_ready),
-                  .inst                  (if_inst   ));
+inst_fetch #(
+	.IFQ_ENTRY(IFQ_ENTRY),
+	.GLOBAL_WIDTH(GLOBAL_WIDTH),
+	.LOCAL_WIDTH(LOCAL_WIDTH),
+	.BTB_SET_WIDTH(BTB_SET_WIDTH),
+	.BTB_WAY_NUM(BTB_WAY_NUM),
+	.B_PATTEN_WIDTH(B_PATTEN_WIDTH),
+	.G_PATTEN_WIDTH(G_PATTEN_WIDTH)
+) if_unit(//input
+          .clk                   (clk),
+          .rst                   (reset),
+          .jump_branch_address   (if_ex_bjpc),
+          .is_jump_branch        (if_ex_isbj&id_vld_pipreg&(~dbus_busy)),
+          //BPU
+          .fail_branch           (if_ex_fail_branch        ),
+          .fail_way_vec          (if_ex_fail_way_vec       ),
+          .fill_pht_history      (if_ex_fill_pht_history   ),
+          .fill_pht_patten_tab   (if_ex_fill_pht_patten_tab),
+          .fail_ghr              (if_ex_fail_ghr           ),
+          .fill_ghr_patten       (if_ex_fill_ghr_patten    ),
+          .fill_ghr              (if_ex_fill_ghr           ),
+          //execption
+          .is_exception          (excep_isexception),
+          .is_excep_return       (excep_id_isexcepreturn),
+          .excep_return_pc       (if_cp0_returnpc),
+          //output
+          .pc                    (if_pc),
+          .pc_4                  (if_pc4),
+          //BPU
+          .btb_way_vec           (if_btb_way_vec      ),
+          .predict_is_branch     (if_predict_is_branch),
+          .predict_pc            (if_predict_pc       ),
+          .pht_history           (if_pht_history      ),
+          .pht_patten_tab        (if_pht_patten_tab   ),
+          .ghr                   (if_ghr              ),
+          .ghr_patten            (if_ghr_patten       ),
+          //exception
+          .excep_code            (if_excepcode),
+          //fetch instruction interface
+          .inst_addr_valid       (inst_addr_valid),
+          .inst_addr_ready       (inst_addr_ready),
+          .inst_addr             (inst_addr      ),
+          .inst_line_valid       (inst_line_valid),
+          .inst_line_ready       (inst_line_ready),
+          .inst_line             (inst_line      ),
+          //pipe interface
+          .inst_valid            (inst_valid),
+          .inst_ready            (inst_ready),
+          .inst                  (if_inst   ));
 
 always @ (posedge clk)
 begin
@@ -254,24 +316,47 @@ begin
          id_pc_pipreg,
          id_pc4_pipreg,
          id_instruction_pipreg,
+         id_btb_way_vec_pipreg,
+         id_predict_is_branch_pipreg,
+         id_predict_pc_pipreg,
+         id_pht_history_pipreg,
+         id_pht_patten_tab_pipreg,
+         id_ghr_pipreg,
+         id_ghr_patten_pipreg,
          id_excepcode_pipreg}
-     <= {1'b0,32'b0,30'b0,`INST_INTI,`INVALID_EXCEP};
+     <= {1'b0,32'b0,30'b0,`INST_INTI,{BTB_WAY_NUM+1+32+PHT_WIDTH+GLOBAL_WIDTH+G_PATTEN_WIDTH{1'b0}},`INVALID_EXCEP};
     else if (if_id_pipreg_en)
         {id_vld_pipreg,
          id_pc_pipreg,
          id_pc4_pipreg,
          id_instruction_pipreg,
+         id_btb_way_vec_pipreg,
+         id_predict_is_branch_pipreg,
+         id_predict_pc_pipreg,
+         id_pht_history_pipreg,
+         id_pht_patten_tab_pipreg,
+         id_ghr_pipreg,
+         id_ghr_patten_pipreg,
          id_excepcode_pipreg}
      <= {if_id_pipreg_en,
          if_pc,
          if_pc4,
          if_inst,
+         if_btb_way_vec,
+         if_predict_is_branch,
+         if_predict_pc,
+         if_pht_history,
+         if_pht_patten_tab,
+         if_ghr,
+         if_ghr_patten,
          if_excepcode};
+
 end
 
 decode id(//input
           .inst                     (id_instruction_pipreg),
           .pc_delayslot             (id_pc4_pipreg),
+          .predict_pc               (id_predict_pc_pipreg),
           .reg_s_value_latest       (id_cft_rsvalue),
           .reg_t_value_latest       (id_cft_rtvalue),
           .hilo_value_latest        (id_cft_hilovalue),
@@ -289,6 +374,7 @@ decode id(//input
           .is_write_hi              (id_iswritehi),
           .is_write_lo              (id_iswritelo),
           .jump_branch_address      (id_bjpc),
+          .btb_addr_fail            (id_btb_addr_fail),
           .cop_address              (id_copaddr),
           //check confict
           .check_is_use_reg_s       (cft_id_users),
@@ -318,8 +404,15 @@ begin
          ex_iswritelo_pipreg,
          ex_bjpc_pipreg,
          ex_pc_pipreg,
+		 ex_btb_addr_fail_pipreg,
+         ex_btb_way_vec_pipreg,
+         ex_predict_is_branch_pipreg,
+         ex_pht_history_pipreg,
+         ex_pht_patten_tab_pipreg,
+         ex_ghr_pipreg,
+         ex_ghr_patten_pipreg,
          ex_excepcode_pipreg}
-     <= {253'b0,`INVALID_EXCEP};
+     <= {254'b0,{1+BTB_WAY_NUM+1+PHT_WIDTH+GLOBAL_WIDTH+G_PATTEN_WIDTH{1'b0}},`INVALID_EXCEP};
     else if (id_ex_pipreg_en)
         {ex_vld_pipreg,
          ex_instropreat_pipreg,
@@ -334,6 +427,13 @@ begin
          ex_iswritelo_pipreg,
          ex_bjpc_pipreg,
          ex_pc_pipreg,
+		 ex_btb_addr_fail_pipreg,
+         ex_btb_way_vec_pipreg,
+         ex_predict_is_branch_pipreg,
+         ex_pht_history_pipreg,
+         ex_pht_patten_tab_pipreg,
+         ex_ghr_pipreg,
+         ex_ghr_patten_pipreg,
          ex_excepcode_pipreg}
      <= {id_vld_pipreg,
          id_instropreat,
@@ -348,50 +448,80 @@ begin
          id_iswritelo,
          id_bjpc,
          id_pc,
+		 id_btb_addr_fail,
+         id_btb_way_vec_pipreg,
+         id_predict_is_branch_pipreg,
+         id_pht_history_pipreg,
+         id_pht_patten_tab_pipreg,
+         id_ghr_pipreg,
+         id_ghr_patten_pipreg,
          id_excepcode};
 end
 
-myexecute ex(//input
-             .clk                       (clk),
-             .reset                     (reset|id_ex_pipreg_clr),
-             .inst_opreat               (ex_instropreat_pipreg),
-             .reg_t_d_31                (ex_regaddress_pipreg),
-             .cop_address               (ex_copaddr_pipreg),
-             .hi_lo_value               (ex_hilovalue_pipreg),
-             .reg_t_value               (ex_rtvalue_pipreg),
-             .alu_opreat_A              (ex_aluopA_pipreg),
-             .alu_opreat_B              (ex_aluopB_pipreg),
-             .is_write_reg              (ex_iswritereg_pipreg),
-             .is_write_hi               (ex_iswritehi_pipreg),
-             .is_write_lo               (ex_iswritelo_pipreg),
-             .jump_branch_address       (ex_bjpc_pipreg),
-             .id_pc                     (ex_pc_pipreg),
-             .id_excep_code             (ex_excepcode_pipreg),
-             .is_busbusy                (dbus_busy),
-              //output
-             .inst_opreat_              (ex_instropreat),
-             .write_reg_address         (ex_regaddress),
-             .write_reg_data            (ex_regwdata),
-             .write_hi_value            (ex_hiwdata),
-             .write_lo_value            (ex_lowdata),
-             .reg_t_value_              (ex_rtvalue),
-             .cop_address_              (ex_copaddr),
-             .rw_mem_address            (ex_rwmemaddr),
-             .opreat_over               (ex_opover),
-             .is_jump_branch            (if_ex_isbj),
-             .jump_branch_address_      (if_ex_bjpc),
-             //check confict
-             .check_is_write_reg        (cft_ex_wreg),
-             .check_is_clean_reg        (cft_ex_clereg),
-             .check_write_reg_address   (cft_ex_regaddr),
-             .check_write_reg_data      (cft_ex_regdata),
-             .check_is_write_hi         (cft_ex_whi),
-             .check_is_write_lo         (cft_ex_wlo),
-             .check_write_hi_value      (cft_ex_hidata),
-             .check_write_lo_value      (cft_ex_lodata),
-             //exception
-             .excep_code                (ex_excepcode),
-             .ex_pc                     (ex_pc));
+myexecute #(
+	.GLOBAL_WIDTH(GLOBAL_WIDTH),
+	.LOCAL_WIDTH(LOCAL_WIDTH),
+	.BTB_SET_WIDTH(BTB_SET_WIDTH),
+	.BTB_WAY_NUM(BTB_WAY_NUM),
+	.B_PATTEN_WIDTH(B_PATTEN_WIDTH),
+	.G_PATTEN_WIDTH(G_PATTEN_WIDTH)
+) ex(//input
+     .clk                       (clk),
+     .reset                     (reset|id_ex_pipreg_clr),
+     .inst_opreat               (ex_instropreat_pipreg),
+     .reg_t_d_31                (ex_regaddress_pipreg),
+     .cop_address               (ex_copaddr_pipreg),
+     .hi_lo_value               (ex_hilovalue_pipreg),
+     .reg_t_value               (ex_rtvalue_pipreg),
+     .alu_opreat_A              (ex_aluopA_pipreg),
+     .alu_opreat_B              (ex_aluopB_pipreg),
+     .is_write_reg              (ex_iswritereg_pipreg),
+     .is_write_hi               (ex_iswritehi_pipreg),
+     .is_write_lo               (ex_iswritelo_pipreg),
+     .jump_branch_address       (ex_bjpc_pipreg),
+     .id_pc                     (ex_pc_pipreg),
+     .id_excep_code             (ex_excepcode_pipreg),
+     //BPU
+	 .btb_addr_fail             (ex_btb_addr_fail_pipreg),
+     .btb_way_vec               (ex_btb_way_vec_pipreg),
+     .predict_is_branch         (ex_predict_is_branch_pipreg),
+     .pht_history               (ex_pht_history_pipreg),
+     .pht_patten_tab            (ex_pht_patten_tab_pipreg),
+     .ghr                       (ex_ghr_pipreg),
+     .ghr_patten                (ex_ghr_patten_pipreg),
+     .is_busbusy                (dbus_busy),
+      //output
+     .inst_opreat_              (ex_instropreat),
+     .write_reg_address         (ex_regaddress),
+     .write_reg_data            (ex_regwdata),
+     .write_hi_value            (ex_hiwdata),
+     .write_lo_value            (ex_lowdata),
+     .reg_t_value_              (ex_rtvalue),
+     .cop_address_              (ex_copaddr),
+     .rw_mem_address            (ex_rwmemaddr),
+     .opreat_over               (ex_opover),
+     .is_jump_branch            (if_ex_isbj),
+     .jump_branch_address_      (if_ex_bjpc),
+     //BPU
+     .fail_branch               (if_ex_fail_branch        ),
+     .fail_way_vec              (if_ex_fail_way_vec       ),
+     .fill_pht_history          (if_ex_fill_pht_history   ),
+     .fill_pht_patten_tab       (if_ex_fill_pht_patten_tab),
+     .fail_ghr                  (if_ex_fail_ghr           ),
+     .fill_ghr_patten           (if_ex_fill_ghr_patten    ),
+     .fill_ghr                  (if_ex_fill_ghr           ),
+     //check confict
+     .check_is_write_reg        (cft_ex_wreg),
+     .check_is_clean_reg        (cft_ex_clereg),
+     .check_write_reg_address   (cft_ex_regaddr),
+     .check_write_reg_data      (cft_ex_regdata),
+     .check_is_write_hi         (cft_ex_whi),
+     .check_is_write_lo         (cft_ex_wlo),
+     .check_write_hi_value      (cft_ex_hidata),
+     .check_write_lo_value      (cft_ex_lodata),
+     //exception
+     .excep_code                (ex_excepcode),
+     .ex_pc                     (ex_pc));
 
 always @ (posedge clk)
 begin
@@ -448,7 +578,7 @@ cop0 syscrtl(//input
              .we                (cop0_am_we),
              .cop_address       (cop0_am_addr),
              .data_i            (cop0_am_wdata),
-             .hardware_int      (int),
+             .hardware_int      (hw_int),
              .is_exception      (excep_isexception),
              .is_bd             (cp0_excep_bd),
              .we_badvaddr       (cp0_excep_webadaddr),
@@ -625,9 +755,203 @@ exception_ctrl excep_ctrl(//output
                           .is_ie         (excep_cp0_isie),
                           .is_exl        (excep_cp0_isexl),
                           .int_mask      (excep_cp0_intmask),
-                          .hardware_int  (int),
+                          .hardware_int  (hw_int),
                           .soft_int      (excep_cp0_softint),
                           .am_excep_code (excep_am_excepcode));
+
+//synopsys translate_off
+class ifq_perf;
+	int fetch_num;
+	int addr_commit_delay;
+	int inst_fetch_delay;
+	int issue_num;
+	int inst_issue_interval;
+
+	int req_queue[$];
+	event sync;
+
+	function new();
+		fetch_num = 0;
+		addr_commit_delay = 0;
+		inst_fetch_delay = 0;
+		issue_num = 0;
+		inst_issue_interval = 0;
+	endfunction
+endclass
+
+class bpu_perf;
+	bit [31:0] addr;
+	int excu_num;
+	int trans_num;
+	int hit_trans_num;
+	int hit_notrans_num;
+	int miss_trans_num;
+	int miss_notrans_num;
+	int victim_num;
+	int alloc_num;
+	int target_err_num;
+	int bpu_err_num;
+	int all_fail_num;
+	bit [BTB_WAY_NUM-1:0] btb_way_vec;
+	bit [BTB_SET_WIDTH-1+2:2] btb_set;
+	real alloc_time;
+
+	function new(bit [31:0] addr);
+		this.addr = addr;
+		excu_num = 0;
+		trans_num = 0;
+	    hit_trans_num = 0;
+	    hit_notrans_num = 0;
+	    miss_trans_num = 0;
+	    miss_notrans_num = 0;
+		victim_num = 0;
+		alloc_num = 0;
+		target_err_num = 0;
+		bpu_err_num = 0;
+		all_fail_num = 0;
+	endfunction
+endclass
+
+class perf_group;
+	ifq_perf ifq;
+	bpu_perf bpu_mmap[bit [31:0]];
+	int btb_usage;
+
+	function new();
+		btb_usage = 0;
+		ifq = new();
+	endfunction
+
+	function void print_ifq(int test_num);
+		$display("-----------IFQ Performance Statistics: TEST%0d----------", test_num);
+		$display("IFU address commit avge delay:       %5.2f", 1.0*ifq.addr_commit_delay/ifq.fetch_num);
+		$display("IFU data fetch avge delay:           %5.2f", 1.0*ifq.inst_fetch_delay/ifq.fetch_num);
+		$display("IFU instruction issue avge interval: %5.2f", 1.0*ifq.inst_issue_interval/ifq.issue_num);
+	endfunction
+
+	function void print_bpu(int test_num);
+		$display("-----------BPU Performance Statistics: TEST%0d----------", test_num);
+		$display("Branch instruction number:     %0d", bpu_mmap.size());
+		$display("Branch execute count:          %0d", bpu_mmap.sum with(item.excu_num));
+		$display("Branch transfer count:         %0d", bpu_mmap.sum() with(item.trans_num));
+		$display("BTB hit & transfer count:      %0d", bpu_mmap.sum() with(item.hit_trans_num));
+		$display("BTB hit & not transfer count:  %0d", bpu_mmap.sum() with(item.hit_notrans_num));
+		$display("BTB miss & transfer count:     %0d", bpu_mmap.sum() with(item.miss_trans_num));
+		$display("BTB miss & not transfer count: %0d", bpu_mmap.sum() with(item.miss_notrans_num));
+		$display("BTB entry victim count:        %0d", bpu_mmap.sum() with(item.victim_num));
+		$display("BTB entry allocate count:      %0d", bpu_mmap.sum() with(item.alloc_num));
+		$display("BTB target error count:        %0d", bpu_mmap.sum() with(item.target_err_num));
+		$display("BPU predict error count:       %0d", bpu_mmap.sum() with(item.bpu_err_num));
+		$display("BPU failure count:             %0d", bpu_mmap.sum() with(item.all_fail_num));
+
+		$display("Branch transfer rate:          %5.2f%%", 100.0*bpu_mmap.sum() with(item.trans_num)/bpu_mmap.sum() with(item.excu_num));
+		$display("BTB hit & transfer rate:       %5.2f%%", 100.0*bpu_mmap.sum() with(item.hit_trans_num)/bpu_mmap.sum() with(item.excu_num));
+		$display("BTB hit & not transfer rate:   %5.2f%%", 100.0*bpu_mmap.sum() with(item.hit_notrans_num)/bpu_mmap.sum() with(item.excu_num));
+		$display("BTB miss & transfer rate:      %5.2f%%", 100.0*bpu_mmap.sum() with(item.miss_trans_num)/bpu_mmap.sum() with(item.excu_num));
+		$display("BTB miss & not transfer rate:  %5.2f%%", 100.0*bpu_mmap.sum() with(item.miss_notrans_num)/bpu_mmap.sum() with(item.excu_num));
+		$display("BTB target error in hit rate:  %5.2f%%", 100.0*bpu_mmap.sum() with(item.target_err_num)/bpu_mmap.sum() with(item.hit_trans_num));
+		$display("BPU predict error in hit rate: %5.2f%%", 100.0*bpu_mmap.sum() with(item.bpu_err_num)/bpu_mmap.sum() with(item.hit_trans_num));
+		$display("BPU all failure rate:          %5.2f%%", 100.0*bpu_mmap.sum() with(item.all_fail_num)/bpu_mmap.sum() with(item.excu_num));
+		$display("BTB usage rate:                %5.2f%%", 100.0*btb_usage/(BTB_WAY_NUM*(2**BTB_SET_WIDTH)));
+	endfunction
+endclass
+
+perf_group perfs[$];
+
+initial fork
+	forever begin
+		perf_group collect_now;
+		@(posedge reset);
+		if(perfs.size > 0) begin
+			for(int i=0; i<2**BTB_SET_WIDTH; i++)
+				for(int j=0; j<BTB_WAY_NUM; j++)
+					perfs[$].btb_usage += if_unit.bpu.entry_vld[i][j];
+
+			foreach(perfs[$].bpu_mmap[i])
+				perfs[$].bpu_mmap[i].btb_way_vec = '0;
+		end
+
+		collect_now = new();
+		perfs.push_back(collect_now);
+	end
+	forever begin
+		@(posedge clk iff id_ex_pipreg_en && ex_vld_pipreg && ex.inst_opreat_[0]); // ex stage is branch inst
+		if(!perfs[$].bpu_mmap.exists(ex.ex_pc))
+			perfs[$].bpu_mmap[ex.ex_pc] = new(ex.ex_pc);
+		perfs[$].bpu_mmap[ex.ex_pc].excu_num++;
+		perfs[$].bpu_mmap[ex.ex_pc].trans_num += ex.real_is_jump_branch;
+		perfs[$].bpu_mmap[ex.ex_pc].hit_trans_num += (|ex.btb_way_vec) & ex.real_is_jump_branch;
+		perfs[$].bpu_mmap[ex.ex_pc].hit_notrans_num += (|ex.btb_way_vec) & (!ex.real_is_jump_branch);
+		perfs[$].bpu_mmap[ex.ex_pc].miss_trans_num += (!(|ex.btb_way_vec)) & ex.real_is_jump_branch;
+		perfs[$].bpu_mmap[ex.ex_pc].miss_notrans_num += (!(|ex.btb_way_vec)) & (!ex.real_is_jump_branch);
+		perfs[$].bpu_mmap[ex.ex_pc].target_err_num += (|ex.btb_way_vec) & ex.real_is_jump_branch & ex.btb_addr_fail;
+		perfs[$].bpu_mmap[ex.ex_pc].bpu_err_num += (|ex.btb_way_vec) & (ex.real_is_jump_branch ^ ex.predict_is_branch);
+		perfs[$].bpu_mmap[ex.ex_pc].all_fail_num += ex.is_jump_branch;
+	end
+	forever begin
+		@(posedge clk iff if_unit.bpu.fail && (~(|if_unit.bpu.fail_way_vec)));
+		if(&if_unit.bpu.entry_vld[if_unit.bpu.fail_branch[BTB_SET_WIDTH-1+2:2]]) begin
+			bpu_perf btb_victim_entry[$];
+			btb_victim_entry = perfs[$].bpu_mmap.find() with((item.btb_way_vec == if_unit.bpu.fill_way_vec) &&
+			                                            (item.btb_set == if_unit.bpu.fail_branch[BTB_SET_WIDTH-1+2:2]));
+			if(btb_victim_entry.size != 1) begin
+				$error("BTB replace find error: size = %d",btb_victim_entry.size);
+				foreach(btb_victim_entry[i])
+					$display("the entry[%d] allocate time: %t", i, btb_victim_entry[i].alloc_time);
+				$stop;
+			end
+			btb_victim_entry[0].victim_num++;
+			btb_victim_entry[0].btb_way_vec = '0;
+		end
+		perfs[$].bpu_mmap[if_unit.bpu.fail_branch].alloc_num++;
+		perfs[$].bpu_mmap[if_unit.bpu.fail_branch].btb_way_vec = if_unit.bpu.fill_way_vec;
+		perfs[$].bpu_mmap[if_unit.bpu.fail_branch].btb_set = if_unit.bpu.fail_branch[BTB_SET_WIDTH-1+2:2];
+		perfs[$].bpu_mmap[if_unit.bpu.fail_branch].alloc_time = $realtime;
+	end
+	forever begin
+		@(posedge clk iff inst_addr_valid & inst_addr_ready);
+		perfs[$].ifq.fetch_num++;
+	end
+	forever begin
+		@(posedge clk iff inst_addr_valid);
+		perfs[$].ifq.addr_commit_delay++;
+	end
+	forever begin
+		@(posedge clk iff ~reset);
+		foreach(perfs[$].ifq.req_queue[i])
+			perfs[$].ifq.req_queue[i]++;
+		-> perfs[$].ifq.sync;
+	end
+	forever begin
+		@(posedge clk iff inst_addr_valid & inst_addr_ready);
+		wait(perfs[$].ifq.sync.triggered);
+		perfs[$].ifq.req_queue.push_back(0);
+	end
+	forever begin
+		int delay;
+		@(posedge clk iff inst_line_valid & inst_line_ready);
+		wait(perfs[$].ifq.sync.triggered);
+		delay = perfs[$].ifq.req_queue.pop_front();
+		perfs[$].ifq.inst_fetch_delay += delay;
+	end
+	forever begin
+		@(posedge clk iff inst_valid & inst_ready);
+		perfs[$].ifq.issue_num++;
+	end
+	forever begin
+		@(posedge clk iff (~reset) && (~inst_valid));
+		perfs[$].ifq.inst_issue_interval++;
+	end
+join
+
+final begin
+	foreach(perfs[i]) begin
+		perfs[i].print_ifq(i+1);
+		perfs[i].print_bpu(i+1);
+	end
+end
+//synopsys translate_on
+
 endmodule
 
 `include "pe_undefs.vh"

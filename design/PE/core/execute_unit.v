@@ -14,6 +14,14 @@ module myexecute(
     opreat_over,
     is_jump_branch,
     jump_branch_address_,
+	//BPU
+	fail_branch,
+	fail_way_vec,
+	fill_pht_history,
+	fill_pht_patten_tab,
+	fail_ghr,
+	fill_ghr_patten,
+	fill_ghr,
     //check confict
     check_is_write_reg,
     check_is_clean_reg,
@@ -41,6 +49,14 @@ module myexecute(
     is_write_lo,
     cop_address,
     jump_branch_address,
+	//BPU
+	btb_addr_fail,
+	btb_way_vec,
+	predict_is_branch,
+	pht_history,
+	pht_patten_tab,
+	ghr,
+	ghr_patten,
     is_busbusy,
     //exception
     id_excep_code,
@@ -48,9 +64,16 @@ module myexecute(
     id_pc
 );
 
+parameter GLOBAL_WIDTH = 8;
+parameter LOCAL_WIDTH = 4;
+parameter BTB_SET_WIDTH = 6;
+parameter BTB_WAY_NUM = 1;
+parameter B_PATTEN_WIDTH = 2;
+parameter G_PATTEN_WIDTH = 2;
+
 input wire clk;
 input wire reset;
-input wire [43:0] inst_opreat;
+input wire [44:0] inst_opreat;
 input wire [4:0] reg_t_d_31;
 input wire [31:0] reg_t_value;
 input wire [31:0] alu_opreat_A;
@@ -63,6 +86,13 @@ input wire [7:0] cop_address;
 input wire [31:0] jump_branch_address;
 input wire [4:0] id_excep_code;
 input wire [31:0] id_pc;
+input wire btb_addr_fail;
+input wire [BTB_WAY_NUM-1:0] btb_way_vec;
+input wire predict_is_branch;
+input wire [LOCAL_WIDTH-1:0] pht_history;
+input wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] pht_patten_tab;
+input wire [GLOBAL_WIDTH-1:0] ghr;
+input wire [G_PATTEN_WIDTH-1:0] ghr_patten;
 input wire is_busbusy;
 output wire [9:0] inst_opreat_;
 output wire [4:0] write_reg_address;
@@ -73,8 +103,15 @@ output wire [31:0] reg_t_value_;
 output wire [7:0] cop_address_;
 output wire [31:0] rw_mem_address;
 output wire opreat_over;
-output reg is_jump_branch;
+output wire is_jump_branch;
 output wire [31:0] jump_branch_address_;
+output wire [31:0] fail_branch;
+output wire [BTB_WAY_NUM-1:0] fail_way_vec;
+output wire [LOCAL_WIDTH-1:0] fill_pht_history;
+output wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] fill_pht_patten_tab;
+output wire [GLOBAL_WIDTH-1:0] fail_ghr;
+output wire [G_PATTEN_WIDTH-1:0] fill_ghr_patten;
+output wire [GLOBAL_WIDTH-1:0] fill_ghr;
 output wire check_is_write_reg;
 output wire check_is_clean_reg;
 output wire [4:0] check_write_reg_address;
@@ -119,6 +156,7 @@ wire inst_blez;
 wire inst_bltz;
 wire inst_bgez;
 wire inst_j;
+wire is_ret;
 assign {inst_add,
         inst_addu,
         inst_sub,
@@ -152,6 +190,7 @@ assign {inst_add,
         inst_bltz,
         inst_bgez,
         inst_j,
+		is_ret,
         check_is_clean_reg,
         inst_opreat_} = inst_opreat;
 
@@ -201,7 +240,6 @@ assign reg_t_value_ = reg_t_value;
 assign cop_address_ = cop_address;
 assign rw_mem_address = addu_result;
 assign write_reg_address = reg_t_d_31;
-assign jump_branch_address_ = jump_branch_address;
 assign check_is_write_reg = is_write_reg & (~(inst_lh&addu_result[0] | inst_lw&(|addu_result[1:0])));
 assign check_is_write_hi = is_write_hi;
 assign check_is_write_lo = is_write_lo;
@@ -212,19 +250,44 @@ assign check_write_lo_value = write_lo_value;
 wire [31:0] pc_link;
 assign pc_link = {(ex_pc[31:3] + 29'd1),ex_pc[2],2'b0};
 
+reg real_is_jump_branch;
 always @ (*)
 begin
     case(1'b1)
-        inst_beq:   is_jump_branch = alu_opreat_A==alu_opreat_B;
-        inst_bne:   is_jump_branch = alu_opreat_A!=alu_opreat_B;
-        inst_bgtz:  is_jump_branch = (~alu_opreat_A[31]) && (|alu_opreat_A);
-        inst_blez:  is_jump_branch = alu_opreat_A[31] || (~(|alu_opreat_A));
-        inst_bltz:  is_jump_branch = alu_opreat_A[31];
-        inst_bgez:  is_jump_branch = ~alu_opreat_A[31];
-        inst_j:     is_jump_branch = 1'b1;
-        default:    is_jump_branch = 1'b0;
+        inst_beq:   real_is_jump_branch = alu_opreat_A==alu_opreat_B;
+        inst_bne:   real_is_jump_branch = alu_opreat_A!=alu_opreat_B;
+        inst_bgtz:  real_is_jump_branch = (~alu_opreat_A[31]) && (|alu_opreat_A);
+        inst_blez:  real_is_jump_branch = alu_opreat_A[31] || (~(|alu_opreat_A));
+        inst_bltz:  real_is_jump_branch = alu_opreat_A[31];
+        inst_bgez:  real_is_jump_branch = ~alu_opreat_A[31];
+        inst_j:     real_is_jump_branch = 1'b1;
+        default:    real_is_jump_branch = 1'b0;
     endcase
 end
+
+assign is_jump_branch = (real_is_jump_branch ^ predict_is_branch) | (real_is_jump_branch & btb_addr_fail);
+assign jump_branch_address_ = ((~real_is_jump_branch)&predict_is_branch) ? pc_link : jump_branch_address;
+assign fail_branch = ex_pc;
+assign fail_way_vec = btb_way_vec;
+assign fail_ghr = ghr;
+assign fill_ghr = {ghr[GLOBAL_WIDTH-2:0],real_is_jump_branch};
+
+wire [G_PATTEN_WIDTH-1:0] g_patten_incr;
+assign g_patten_incr = real_is_jump_branch ? 1 : {G_PATTEN_WIDTH{1'b1}};
+saturate#(.WIDTH(G_PATTEN_WIDTH)) update_ghr(.d_i(ghr_patten), .incr(g_patten_incr), .d_o(fill_ghr_patten));
+
+wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] new_patten_tab;
+update_pht#(
+	.LOCAL_WIDTH(LOCAL_WIDTH),
+	.B_PATTEN_WIDTH(B_PATTEN_WIDTH)
+) fail_update(
+	.history_i    ( pht_history ),
+	.patten_tab_i ( pht_patten_tab ),
+	.is_branch    ( real_is_jump_branch ),
+	.history_o    ( fill_pht_history ),
+	.patten_tab_o ( new_patten_tab )
+);
+assign fill_pht_patten_tab = {B_PATTEN_WIDTH*(2**LOCAL_WIDTH){inst_j}} | new_patten_tab;
 
 always @ (*)
 begin

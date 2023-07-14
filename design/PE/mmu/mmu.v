@@ -92,7 +92,7 @@ output wire inst_cpu_addr_ready;
 input wire [31:0] inst_cpu_addr;
 output wire inst_cpu_data_valid;
 input wire inst_cpu_data_ready;
-input wire [31:0] inst_cpu_data;
+output wire [31:0] inst_cpu_data;
 
 input wire data_cpu_valid;
 output wire data_cpu_ready;

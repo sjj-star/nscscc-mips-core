@@ -10,11 +10,13 @@ module fifo (
     full
 );
 
-parameter RETIRE_MEM_EN = 0;
-parameter BYPASS = 0;
 parameter WIDTH = 32;
-parameter DEEP_SIZE = 4;
-localparam DEEP = 2**DEEP_SIZE;
+parameter DEEP = 2;
+localparam DEEP_SIZE = $clog2(DEEP);
+parameter RETIRE_MEM_EN = 0;
+parameter RETIRE_HSB = WIDTH-1;
+parameter RETIRE_LSB = 0;
+parameter BYPASS = 0;
 
 input wire clk;
 input wire reset;
@@ -63,7 +65,7 @@ genvar i;
 for(i=0; i<DEEP; i=i+1) begin
 	always @(posedge clk) begin
 		if(retire_mem[i] || (read && (r_pnt == i)))
-			mem[i] <= {WIDTH{1'b0}};
+			mem[i][RETIRE_HSB:RETIRE_LSB] <= {RETIRE_HSB-RETIRE_LSB+1{1'b0}};
 	    else if(write && (w_pnt == i))
 	        mem[i] <= indata;
 	end
@@ -84,8 +86,7 @@ assign empty = ~(|count);
 
 assign outdata = (empty & write) ? indata : mem[r_pnt];
 
-    end
-    else begin: normal_fifo
+    end else begin: normal_fifo
 
 assign outdata = mem[r_pnt];
 
