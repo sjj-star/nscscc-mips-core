@@ -1,6 +1,9 @@
 `timescale 1ns / 1ps
 /*
  * saturating counter
+ * d_i: unsigned data
+ * incr: signed increment
+ * d_o: unsigned result
  */
 module saturate(
 //inputs
@@ -79,9 +82,6 @@ assign history_o = {history_i[LOCAL_WIDTH-2:0],is_branch};
 
 endmodule
 
-/*
- * Global Branch Pattern Table
- */
 module branch_predict_unit(
 //inputs
 	clk,
@@ -92,6 +92,8 @@ module branch_predict_unit(
 	fail_branch,
 	fail_way_vec,
 	fill_target,
+	fill_is_ret,
+	fill_is_link,
 	fill_pht_history,
 	fill_pht_patten_tab,
 	fail_ghr,
@@ -103,6 +105,8 @@ module branch_predict_unit(
 	btb_way_vec,
 	predict_is_branch,
 	predict_pc,
+	predict_is_ret,
+	predict_is_link,
 	pht_history,
 	pht_patten_tab,
 	ghr,
@@ -118,7 +122,7 @@ parameter G_PATTEN_WIDTH = 2;
 
 localparam GPT_DEPTH = 2**(GLOBAL_WIDTH);
 localparam BTB_DEPTH = 2**BTB_SET_WIDTH;
-localparam BTB_WIDTH = ((32-2)-BTB_SET_WIDTH+(32-2));
+localparam BTB_WIDTH = ((32-2)-BTB_SET_WIDTH+(32-2))+2;
 localparam PHT_WIDTH = LOCAL_WIDTH+B_PATTEN_WIDTH*(2**LOCAL_WIDTH);
 localparam BPU_GHP_EN = 0;
 
@@ -130,6 +134,8 @@ input wire fail;
 input wire [31:0] fail_branch;
 input wire [BTB_WAY_NUM-1:0] fail_way_vec;
 input wire [31:0] fill_target;
+input wire fill_is_ret;
+input wire fill_is_link;
 input wire [LOCAL_WIDTH-1:0] fill_pht_history;
 input wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] fill_pht_patten_tab;
 input wire [GLOBAL_WIDTH-1:0] fail_ghr;
@@ -140,6 +146,8 @@ output reg [31:0] pc_out;
 output wire [BTB_WAY_NUM-1:0] btb_way_vec;
 output wire predict_is_branch;
 output wire [31:0] predict_pc;
+output wire predict_is_ret;
+output wire predict_is_link;
 output wire [LOCAL_WIDTH-1:0] pht_history;
 output wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] pht_patten_tab;
 output reg [GLOBAL_WIDTH-1:0] ghr;
@@ -156,6 +164,8 @@ wire [PHT_WIDTH-1:0] pht_din;
 wire [PHT_WIDTH-1:0] pht_dout[0:BTB_WAY_NUM-1];
 wire [31:BTB_SET_WIDTH+2] btb_tag[0:BTB_WAY_NUM-1];
 wire [31:2] target_pc[0:BTB_WAY_NUM-1];
+wire is_ret [0:BTB_WAY_NUM-1];
+wire is_link [0:BTB_WAY_NUM-1];
 wire [LOCAL_WIDTH-1:0] branch_history[0:BTB_WAY_NUM-1];
 wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] branch_patten_tab[0:BTB_WAY_NUM-1];
 wire [B_PATTEN_WIDTH-1:0] branch_patten[0:BTB_WAY_NUM-1];
@@ -163,6 +173,8 @@ reg hit_btb;
 reg [BTB_WAY_NUM-1:0] hit_btb_vec;
 reg [31:BTB_SET_WIDTH+2] hit_btb_tag;
 reg [31:2] hit_target_pc;
+reg hit_is_ret;
+reg hit_is_link;
 reg [B_PATTEN_WIDTH-1:0] hit_branch_patten;
 reg [LOCAL_WIDTH-1:0] hit_branch_history;
 reg [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] hit_branch_patten_tab;
@@ -185,6 +197,9 @@ wire [31:0] pht_fill_pc;
 wire [BTB_WAY_NUM-1:0] pht_fill_way_vec;
 wire [GLOBAL_WIDTH-1:0] gpt_fill_ghr;
 wire [G_PATTEN_WIDTH-1:0] gpt_fill_patten;
+wire [31:0] link_addr;
+wire [31:0] return_addr;
+wire ras_empty;
 
 int i,j;
 genvar n,m;
@@ -235,7 +250,7 @@ always @(posedge clk) begin
 		way_vld <= entry_vld[pc_in[BTB_SET_WIDTH-1+2:2]];
 end
 
-assign btb_din = {fail_branch[31:BTB_SET_WIDTH+2], fill_target[31:2]};
+assign btb_din = {fail_branch[31:BTB_SET_WIDTH+2], fill_target[31:2], fill_is_ret, fill_is_link};
 assign pht_din = fail ? {fill_pht_history, fill_pht_patten_tab} : {update_branch_history, update_branch_patten_tab};
 assign pht_fill_pc = fail ? fail_branch : update_pc;
 assign pht_fill_way_vec = fail ? fill_way_vec : update_way_vec;
@@ -326,7 +341,7 @@ for(n=0; n<BTB_WAY_NUM; n=n+1) begin: way_info
 		.sleep          ( 1'b0                             )
 	);
 
-	assign {btb_tag[n],target_pc[n]} = btb_dout[n];
+	assign {btb_tag[n],target_pc[n], is_ret[n], is_link[n]} = btb_dout[n];
 	assign {branch_history[n],branch_patten_tab[n]} = pht_dout[n];
 
 	wire [B_PATTEN_WIDTH-1:0] patten_tab[0:2**LOCAL_WIDTH-1];
@@ -342,6 +357,8 @@ always @(*) begin
 	hit_btb_vec = '0;
 	hit_btb_tag = '0;
 	hit_target_pc = '0;
+	hit_is_ret = '0;
+	hit_is_link = '0;
 	hit_branch_patten = '0;
 	hit_branch_history = '0;
 	hit_branch_patten_tab = '0;
@@ -350,11 +367,29 @@ always @(*) begin
 		hit_btb = hit_btb | hit_btb_vec[i];
 		hit_btb_tag = hit_btb_tag | (btb_tag[i] & {32-BTB_SET_WIDTH-2{hit_btb_vec[i]}});
 		hit_target_pc = hit_target_pc | (target_pc[i] & {32-2{hit_btb_vec[i]}});
+		hit_is_ret = hit_is_ret | (is_ret[i] & hit_btb_vec[i]);
+		hit_is_link = hit_is_link | (is_link[i] & hit_btb_vec[i]);
 		hit_branch_patten = hit_branch_patten | (branch_patten[i] & {B_PATTEN_WIDTH{hit_btb_vec[i]}});
 		hit_branch_history = hit_branch_history | (branch_history[i] & {LOCAL_WIDTH{hit_btb_vec[i]}});
 		hit_branch_patten_tab = hit_branch_patten_tab | (branch_patten_tab[i] & {B_PATTEN_WIDTH*(2**LOCAL_WIDTH){hit_btb_vec[i]}});
 	end
 end
+
+assign link_addr = fail ? {(fail_branch[31:3] + 29'd1),fail_branch[2],2'b0} : {(pc_out[31:3] + 29'd1),pc_out[2],2'b0};
+
+// return address stack
+reg_stack #(
+	.WIDTH(32),
+	.DEEP(8)
+) u_ras(
+	.clk      ( clk   ),
+	.reset    ( reset ),
+	.push     ( (fail&fill_is_link) | (pc_vld&hit_is_link) ),
+	.pop      ( (fail&fill_is_ret) | (pc_vld&hit_is_ret) ),
+	.data_in  ( link_addr ),
+	.data_out ( return_addr ),
+	.empty    ( ras_empty )
+);
 
 generate
 if(BPU_GHP_EN) begin
@@ -442,10 +477,12 @@ end
 
 assign btb_way_vec = hit_btb_vec;
 assign predict_is_branch = predict_patten[B_PATTEN_WIDTH-1] & hit_btb;
-assign predict_pc = {hit_target_pc, 2'b0};
+assign predict_pc = ((~ras_empty)&hit_is_ret) ? return_addr : {hit_target_pc, 2'b0};
 assign pht_history = hit_branch_history;
 assign pht_patten_tab = hit_branch_patten_tab;
 assign ghr_patten = global_patten;
+assign predict_is_ret = hit_is_ret;
+assign predict_is_link = hit_is_link;
 
 always @(posedge clk) begin
 	if(reset | (~(pc_vld&btb_vld))) begin

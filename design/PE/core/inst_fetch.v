@@ -24,6 +24,8 @@ module inst_fetch(
 	//BPU
 	fail_branch,
 	fail_way_vec,
+	fill_is_ret,
+	fill_is_link,
 	fill_pht_history,
 	fill_pht_patten_tab,
 	fail_ghr,
@@ -65,6 +67,8 @@ input wire is_excep_return;
 input wire [31:0] excep_return_pc;
 input wire [31:0] fail_branch;
 input wire [BTB_WAY_NUM-1:0] fail_way_vec;
+input wire fill_is_ret;
+input wire fill_is_link;
 input wire [LOCAL_WIDTH-1:0] fill_pht_history;
 input wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] fill_pht_patten_tab;
 input wire [GLOBAL_WIDTH-1:0] fail_ghr;
@@ -98,6 +102,7 @@ wire [31:0] excep_return_pc_q;
 wire is_jump_branch_q;
 wire [31:0] jump_branch_address_q;
 wire flush_req;
+reg flushing;
 wire bq_empty;
 reg [31:0] prefetch_addr;
 wire prefetch_full;
@@ -125,7 +130,7 @@ wire [G_PATTEN_WIDTH-1:0] bpu_ghr_patten;
 
 fifo #(
 	.RETIRE_MEM_EN(1),
-    .WIDTH(1+1+32+1+32+32+BTB_WAY_NUM+PHT_WIDTH+GLOBAL_WIDTH+G_PATTEN_WIDTH+GLOBAL_WIDTH),
+    .WIDTH(1+1+32+1+32+32+BTB_WAY_NUM+2+PHT_WIDTH+GLOBAL_WIDTH+G_PATTEN_WIDTH+GLOBAL_WIDTH),
     .DEEP(2)
 ) branch_req_queue(
     .clk(clk),
@@ -140,6 +145,8 @@ fifo #(
 			 jump_branch_address,
 	         fail_branch,
 	         fail_way_vec,
+	         fill_is_ret,
+	         fill_is_link,
 	         fill_pht_history,
 	         fill_pht_patten_tab,
 	         fail_ghr,
@@ -152,6 +159,8 @@ fifo #(
 	          jump_branch_address_q,
 	          bpu_fail_branch,
 	          bpu_fail_way_vec,
+	          bpu_fill_is_ret,
+	          bpu_fill_is_link,
 	          bpu_fill_pht_history,
 	          bpu_fill_pht_patten_tab,
 	          bpu_fail_ghr,
@@ -208,6 +217,8 @@ branch_predict_unit #(
 	.fail_branch         ( bpu_fail_branch            ),
 	.fail_way_vec        ( bpu_fail_way_vec           ),
 	.fill_target         ( bpu_fill_target            ),
+	.fill_is_ret         ( bpu_fill_is_ret            ),
+	.fill_is_link        ( bpu_fill_is_link           ),
 	.fill_pht_history    ( bpu_fill_pht_history       ),
 	.fill_pht_patten_tab ( bpu_fill_pht_patten_tab    ),
 	.fail_ghr            ( bpu_fail_ghr               ),
@@ -219,6 +230,8 @@ branch_predict_unit #(
 	.btb_way_vec         ( bpu_btb_way_vec            ),
 	.predict_is_branch   ( bpu_predict_is_branch      ),
 	.predict_pc          ( bpu_predict_pc             ),
+	.predict_is_ret      ( bpu_predict_is_ret         ),
+	.predict_is_link     ( bpu_predict_is_link        ),
 	.pht_history         ( bpu_pht_history            ),
 	.pht_patten_tab      ( bpu_pht_patten_tab         ),
 	.ghr                 ( bpu_ghr                    ),

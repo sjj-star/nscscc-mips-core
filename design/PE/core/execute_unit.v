@@ -17,6 +17,8 @@ module myexecute(
 	//BPU
 	fail_branch,
 	fail_way_vec,
+	fill_is_ret,
+	fill_is_link,
 	fill_pht_history,
 	fill_pht_patten_tab,
 	fail_ghr,
@@ -107,6 +109,8 @@ output wire is_jump_branch;
 output wire [31:0] jump_branch_address_;
 output wire [31:0] fail_branch;
 output wire [BTB_WAY_NUM-1:0] fail_way_vec;
+output wire fill_is_ret;
+output wire fill_is_link;
 output wire [LOCAL_WIDTH-1:0] fill_pht_history;
 output wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] fill_pht_patten_tab;
 output wire [GLOBAL_WIDTH-1:0] fail_ghr;
@@ -269,6 +273,8 @@ assign is_jump_branch = (real_is_jump_branch ^ predict_is_branch) | (real_is_jum
 assign jump_branch_address_ = ((~real_is_jump_branch)&predict_is_branch) ? pc_link : jump_branch_address;
 assign fail_branch = ex_pc;
 assign fail_way_vec = btb_way_vec;
+assign fill_is_ret = is_ret;
+assign fill_is_link = inst_bjlink;
 assign fail_ghr = ghr;
 assign fill_ghr = {ghr[GLOBAL_WIDTH-2:0],real_is_jump_branch};
 

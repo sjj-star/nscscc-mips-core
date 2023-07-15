@@ -68,6 +68,8 @@ wire        if_ex_isbj;
 wire [31:0] if_ex_fail_branch;
 wire [BTB_WAY_NUM-1:0] if_ex_fail_way_vec;
 wire [LOCAL_WIDTH-1:0] if_ex_fill_pht_history;
+wire if_ex_fill_is_ret;
+wire if_ex_fill_is_link;
 wire [B_PATTEN_WIDTH*(2**LOCAL_WIDTH)-1:0] if_ex_fill_pht_patten_tab;
 wire [GLOBAL_WIDTH-1:0] if_ex_fail_ghr;
 wire [G_PATTEN_WIDTH-1:0] if_ex_fill_ghr_patten;
@@ -275,6 +277,8 @@ inst_fetch #(
           //BPU
           .fail_branch           (if_ex_fail_branch        ),
           .fail_way_vec          (if_ex_fail_way_vec       ),
+          .fill_is_ret           (if_ex_fill_is_ret        ),
+          .fill_is_link          (if_ex_fill_is_link       ),
           .fill_pht_history      (if_ex_fill_pht_history   ),
           .fill_pht_patten_tab   (if_ex_fill_pht_patten_tab),
           .fail_ghr              (if_ex_fail_ghr           ),
@@ -505,6 +509,8 @@ myexecute #(
      //BPU
      .fail_branch               (if_ex_fail_branch        ),
      .fail_way_vec              (if_ex_fail_way_vec       ),
+     .fill_is_ret               (if_ex_fill_is_ret        ),
+     .fill_is_link              (if_ex_fill_is_link       ),
      .fill_pht_history          (if_ex_fill_pht_history   ),
      .fill_pht_patten_tab       (if_ex_fill_pht_patten_tab),
      .fail_ghr                  (if_ex_fail_ghr           ),
@@ -766,6 +772,7 @@ class ifq_perf;
 	int inst_fetch_delay;
 	int issue_num;
 	int inst_issue_interval;
+	int retire_branch_num;
 
 	int req_queue[$];
 	event sync;
@@ -776,6 +783,7 @@ class ifq_perf;
 		inst_fetch_delay = 0;
 		issue_num = 0;
 		inst_issue_interval = 0;
+		retire_branch_num = 0;
 	endfunction
 endclass
 
@@ -827,6 +835,7 @@ class perf_group;
 		$display("IFU address commit avge delay:       %5.2f", 1.0*ifq.addr_commit_delay/ifq.fetch_num);
 		$display("IFU data fetch avge delay:           %5.2f", 1.0*ifq.inst_fetch_delay/ifq.fetch_num);
 		$display("IFU instruction issue avge interval: %5.2f", 1.0*ifq.inst_issue_interval/ifq.issue_num);
+		$display("IFU retire branch number:            %0d", ifq.retire_branch_num);
 	endfunction
 
 	function void print_bpu(int test_num);
@@ -941,6 +950,10 @@ initial fork
 	forever begin
 		@(posedge clk iff (~reset) && (~inst_valid));
 		perfs[$].ifq.inst_issue_interval++;
+	end
+	forever begin
+		@(posedge clk iff (~if_unit.inst_empty) && (~if_unit.pc_valid) && (|if_unit.btb_way_vec));
+		perfs[$].ifq.retire_branch_num++;
 	end
 join
 
